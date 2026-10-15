@@ -1,0 +1,39 @@
+{
+  "config": {
+    "step": {
+      "pick": {
+        "title": "Choose your iZone bridge",
+        "data": { "bridge": "Bridge" }
+      },
+      "manual": {
+        "title": "Connect to an iZone bridge",
+        "description": "No bridge was found automatically. Enter the bridge's IP address (a DHCP reservation is recommended).",
+        "data": { "host": "IP address" }
+      }
+    },
+    "error": {
+      "cannot_connect": "Could not reach an iZone v2 bridge at that address."
+    },
+    "abort": {
+      "already_configured": "This bridge is already set up.",
+      "cannot_connect": "Could not reach the discovered bridge."
+    }
+  },
+  "entity": {
+    "binary_sensor": {
+      "filter_warning": { "name": "Filter warning" },
+      "ac_error": { "name": "AC fault" },
+      "sensor_fault": { "name": "Sensor fault" },
+      "damper_fault": { "name": "Damper fault" }
+    },
+    "sensor": {
+      "supply_temperature": { "name": "Supply air temperature" },
+      "return_temperature": { "name": "Return air temperature" },
+      "ac_error_code": { "name": "AC error code" },
+      "damper_position": { "name": "Damper position" }
+    },
+    "switch": {
+      "isave": { "name": "iSave" }
+    }
+  }
+}

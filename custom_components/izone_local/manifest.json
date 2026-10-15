@@ -1,0 +1,11 @@
+{
+  "domain": "izone_local",
+  "name": "iZone Local (API v2)",
+  "codeowners": [],
+  "config_flow": true,
+  "documentation": "https://developer.izone.com.au/docs/getting-started/local/",
+  "integration_type": "hub",
+  "iot_class": "local_polling",
+  "requirements": [],
+  "version": "0.1.0"
+}
