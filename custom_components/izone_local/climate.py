@@ -63,8 +63,12 @@ async def async_setup_entry(
 ) -> None:
     coordinator = entry.runtime_data
     entities: list[ClimateEntity] = [IZoneSystemClimate(coordinator)]
+    # A bypass zone is a pressure-relief damper the system drives itself, so it
+    # gets no climate entity (its damper sensors are still created).
     entities.extend(
-        IZoneZoneClimate(coordinator, index) for index in coordinator.data.zones
+        IZoneZoneClimate(coordinator, index)
+        for index, zone in coordinator.data.zones.items()
+        if not zone.get("Bypass")
     )
     async_add_entities(entities)
 

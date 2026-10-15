@@ -13,7 +13,7 @@ It does not use the cloud.
 | Entity | Notes |
 | --- | --- |
 | AC climate | Off / Cool / Heat / Fan only / Dry / Heat-Cool (iZone "Auto"); fan low, medium, high, auto, top. When a control zone is set (`CtrlZone`), the target and current temperature come from that zone. |
-| Zone climate (one per zone) | Off = damper closed, Fan only = open, Auto = temperature-controlled (only on zones of type Auto). |
+| Zone climate (one per zone, on its own device named after the zone) | Off = damper closed, Fan only = open, Auto = temperature-controlled (only on zones of type Auto). Setting a temperature on a closed or open zone switches it to Auto. Bypass zones get no climate entity, because the system controls them itself. |
 | Sensors | Supply air temperature, return air temperature, AC error code; zone temperature and damper position. |
 | Binary sensors | Filter warning, AC fault; zone sensor fault and damper fault. |
 | Switch | iSave (only if the system has iSave enabled). |
@@ -73,6 +73,12 @@ sleep timer, zone mode and zone setpoint. More findings:
 - A zone setpoint only takes effect while the zone is in Auto. Sent to a closed
   or open zone, the command switches the zone to Auto and drops the
   temperature. The integration therefore switches the zone to Auto first.
+- Back-to-back commands are unreliable. Right after a zone mode change, the
+  bridge replies `{BUSY}`. About 0.5 s later it replies `{OK}` but still drops
+  the command. From 1 s on, commands work. Commands are therefore sent at least
+  1.5 s apart, and zone setpoints are read back to confirm they were applied.
+- Each zone was controlled through its own entity, and the other zones were
+  confirmed unchanged.
 - While a zone is the control zone (`CtrlZone` 0–13), the unit's `Setpoint`
   shows that zone's setpoint and `SysSetpoint` is ignored. The AC entity then
   sends its temperature to that zone instead. `CtrlZone` can't be set directly;

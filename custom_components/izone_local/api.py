@@ -17,6 +17,7 @@ import logging
 import math
 import re
 import socket
+import time
 from dataclasses import dataclass, field
 from typing import Any
 
@@ -29,6 +30,11 @@ DISCOVERY_MESSAGE = b"IASD"
 REQUEST_TIMEOUT = 10
 # Back-off (seconds) after each "{BUSY}" reply; the last attempt's reply is final.
 BUSY_RETRY_DELAYS = (0.5, 1, 2, 3, 0)
+# Minimum spacing between commands. Measured: 0.5 s after a zone mode change
+# a setpoint gets "{OK}" but is dropped; 1 s works. 1.5 s leaves a margin.
+COMMAND_GAP = 1.5
+# How long to wait before reading a zone back to confirm a setpoint.
+SETPOINT_VERIFY_DELAY = 1.0
 
 QUERY_SYSTEM = 1
 QUERY_ZONE = 2
@@ -133,6 +139,8 @@ class IZoneClient:
         self._session = session
         self.host = host
         self._lock = asyncio.Lock()
+        self._command_lock = asyncio.Lock()
+        self._last_command = 0.0
 
     async def _post(self, path: str, payload: dict[str, Any]) -> str:
         url = f"http://{self.host}/{path}"
@@ -187,16 +195,26 @@ class IZoneClient:
     async def command(self, name: str, value: Any) -> None:
         """Send one command. The bridge replies "{OK}", or "{BUSY}" while it is
         still processing a previous command, in which case we back off and retry.
+
+        Commands are spaced COMMAND_GAP apart: about 0.5 s after a command the
+        bridge answers "{OK}" yet silently drops the next one.
         """
-        for delay in BUSY_RETRY_DELAYS:
-            text = await self._post("iZoneCommandV2", {name: value})
-            reply = text.strip().strip('"{}').upper()
-            if reply == "OK":
-                return
-            if reply != "BUSY":
-                break
-            _LOGGER.debug("Bridge busy for %s, retrying in %ss", name, delay)
-            await asyncio.sleep(delay)
+        async with self._command_lock:
+            wait = self._last_command + COMMAND_GAP - time.monotonic()
+            if wait > 0:
+                await asyncio.sleep(wait)
+            try:
+                for delay in BUSY_RETRY_DELAYS:
+                    text = await self._post("iZoneCommandV2", {name: value})
+                    reply = text.strip().strip('"{}').upper()
+                    if reply == "OK":
+                        return
+                    if reply != "BUSY":
+                        break
+                    _LOGGER.debug("Bridge busy for %s, retrying in %ss", name, delay)
+                    await asyncio.sleep(delay)
+            finally:
+                self._last_command = time.monotonic()
         raise IZoneCommandError(f"{name}={value!r} rejected: {text!r}")
 
     # Convenience wrappers ------------------------------------------------
@@ -234,10 +252,20 @@ class IZoneClient:
     async def ensure_zone_setpoint(
         self, index: int, celsius: float, current_mode: int | None
     ) -> None:
-        """Set a zone's temperature, switching it to Auto first if needed."""
+        """Set a zone's temperature, switching it to Auto first if needed.
+
+        The bridge can answer "{OK}" and still drop a setpoint, so read the
+        zone back and retry once before reporting failure.
+        """
         if current_mode not in (ZONE_MODE_AUTO, ZONE_MODE_OVERRIDE):
             await self.set_zone_mode(index, ZONE_MODE_AUTO)
-        await self.set_zone_setpoint(index, celsius)
+        want = to_centi(celsius)
+        for _ in range(2):
+            await self.set_zone_setpoint(index, celsius)
+            await asyncio.sleep(SETPOINT_VERIFY_DELAY)
+            if (await self.get_zone(index)).get("Setpoint") == want:
+                return
+        raise IZoneCommandError(f"Zone {index} setpoint {want} was not applied")
 
     async def set_zone_max_air(self, index: int, percent: int) -> None:
         await self.command("ZoneMaxAir", {"Index": index, "MaxAir": percent})
