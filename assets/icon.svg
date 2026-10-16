@@ -1,0 +1,16 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512">
+  <title>iZone Local</title>
+  <!-- House: the ducted system. Round joins soften the corners. -->
+  <path d="M256 44 L468 226 H432 V468 H80 V226 H44 Z"
+        fill="#0F766E" stroke="#0F766E" stroke-width="40" stroke-linejoin="round"/>
+  <!-- Airflow under the roof -->
+  <g fill="none" stroke="#FFFFFF" stroke-width="16" stroke-linecap="round">
+    <path d="M190 150 q22 -18 44 0 t44 0 t44 0"/>
+    <path d="M168 196 q22 -18 44 0 t44 0 t44 0 t44 0"/>
+  </g>
+  <!-- Four zones: cooling, heating, and two closed -->
+  <rect x="108" y="248" width="136" height="94" rx="20" fill="#7DD3FC"/>
+  <rect x="268" y="248" width="136" height="94" rx="20" fill="#FDBA74"/>
+  <rect x="108" y="362" width="136" height="94" rx="20" fill="#E2E8F0"/>
+  <rect x="268" y="362" width="136" height="94" rx="20" fill="#E2E8F0"/>
+</svg>
