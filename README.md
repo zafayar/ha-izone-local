@@ -13,10 +13,33 @@ It does not use the cloud.
 | Entity | Notes |
 | --- | --- |
 | AC climate | Off / Cool / Heat / Fan only / Dry / Heat-Cool (iZone "Auto"); fan low, medium, high, auto, top. When a control zone is set (`CtrlZone`), the target and current temperature come from that zone. |
-| Zone climate (one per zone, on its own device named after the zone) | Off = damper closed, Fan only = open, Auto = temperature-controlled (only on zones of type Auto). Setting a temperature on a closed or open zone switches it to Auto. Bypass zones get no climate entity, because the system controls them itself. |
+| Zone climate (one per zone, on its own device named after the zone) | Off = damper closed (or the AC is off), Fan only = open, Auto = temperature-controlled (only on zones of type Auto). Setting a temperature on a closed or open zone switches it to Auto. Zones also switch the AC on and off; see below. Bypass zones get no climate entity, because the system controls them itself. |
 | Sensors | Supply air temperature, return air temperature, AC error code; zone temperature and damper position. |
 | Binary sensors | Filter warning, AC fault; zone sensor fault and damper fault. |
 | Switch | iSave (only if the system has iSave enabled). |
+
+### The AC follows the zones
+
+The AC's power is tied to the zones, so you can run the house from the zone
+entities alone:
+
+- **Turning a zone on** (Fan only, Auto, or setting its temperature) turns the
+  AC on if it is off. Any other zones left open from before are closed first,
+  so only the zone you chose comes on.
+- **Turning the last zone off** turns the AC off. Before deciding, the
+  integration re-reads every zone, in case one was opened from the iZone app
+  or wall controller.
+- **While the AC is off, every zone reports Off**, whatever its damper setting
+  on the bridge.
+- **The AC's own on/off still works.** Turning it off leaves the zones as they
+  are on the bridge, so turning it back on resumes the same zones.
+
+Bypass and constant zones are opened by the system itself, so they don't count
+as "on". Changes made outside Home Assistant (the iZone app, the wall
+controller) are not overridden: turning the AC on there with every zone closed
+leaves it on.
+
+### Names
 
 Names come from the system itself:
 
