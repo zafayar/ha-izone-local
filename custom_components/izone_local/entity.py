@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from collections.abc import Awaitable
+from collections.abc import Awaitable, Callable
 from typing import Any
 
 from homeassistant.exceptions import HomeAssistantError
@@ -10,8 +10,11 @@ from homeassistant.helpers.device_registry import DeviceInfo
 from homeassistant.helpers.update_coordinator import CoordinatorEntity
 
 from .api import IZoneError
-from .const import DOMAIN, brand_name, system_name, unit_model
-from .coordinator import IZoneCoordinator
+from .const import DOMAIN, PENDING_ICON, brand_name, system_name, unit_model
+from .coordinator import IZoneCoordinator, PendingKey
+
+# One command to send, as a zero-argument callable so it runs in order.
+type Step = Callable[[], Awaitable[None]]
 
 
 class IZoneEntity(CoordinatorEntity[IZoneCoordinator]):
@@ -32,15 +35,40 @@ class IZoneEntity(CoordinatorEntity[IZoneCoordinator]):
 
     @property
     def system(self) -> dict[str, Any]:
-        return self.coordinator.data.system
+        """The system datagram, with changes still waiting on the bridge."""
+        return self.coordinator.system_view()
 
-    async def _run(self, command: Awaitable[None]) -> None:
-        """Send a command, then poll so the UI reflects the new state."""
+    @property
+    def pending(self) -> bool:
+        """Whether this entity shows a change the bridge hasn't confirmed."""
+        return False
+
+    @property
+    def icon(self) -> str | None:
+        return PENDING_ICON if self.pending else super().icon
+
+    async def _apply(self, changes: dict[PendingKey, Any], *steps: Step) -> None:
+        """Show `changes` at once, send `steps` in order, then re-read the bridge.
+
+        The bridge needs commands well apart, so a few steps take seconds;
+        showing the result up front keeps the UI responsive meanwhile. One
+        direct refresh at the end (not a debounced one per command), plus a
+        few quick follow-ups if needed, confirms the change soon after.
+        """
+        if not changes and not steps:
+            return
+        coordinator = self.coordinator
+        coordinator.expect(changes)
         try:
-            await command
+            for step in steps:
+                await step()
         except IZoneError as err:
+            coordinator.forget(changes)
             raise HomeAssistantError(f"iZone command failed: {err}") from err
-        await self.coordinator.async_request_refresh()
+        finally:
+            await coordinator.async_refresh()
+            # The bridge can take a second or two to report what it did.
+            coordinator.confirm_soon()
 
 
 class IZoneZoneEntity(IZoneEntity):
@@ -59,7 +87,8 @@ class IZoneZoneEntity(IZoneEntity):
 
     @property
     def zone(self) -> dict[str, Any]:
-        return self.coordinator.data.zones.get(self.index, {})
+        """This zone's datagram, with changes still waiting on the bridge."""
+        return self.coordinator.zone_view(self.index)
 
     @property
     def available(self) -> bool:

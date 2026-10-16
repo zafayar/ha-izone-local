@@ -18,9 +18,9 @@ from homeassistant.core import HomeAssistant
 from homeassistant.helpers.entity_platform import AddConfigEntryEntitiesCallback
 
 from . import const as c
-from .api import from_centi
+from .api import from_centi, to_centi
 from .coordinator import IZoneConfigEntry, IZoneCoordinator
-from .entity import IZoneEntity, IZoneZoneEntity
+from .entity import IZoneEntity, IZoneZoneEntity, Step
 
 FAN_TOP = "top"
 
@@ -41,6 +41,9 @@ SYS_FAN_TO_HA = {
     c.FAN_TOP: FAN_TOP,
 }
 HA_TO_SYS_FAN = {v: k for k, v in SYS_FAN_TO_HA.items()}
+
+# System fields the AC entity changes; a pending one shows its hourglass.
+SYS_FIELDS = ("SysOn", "SysMode", "SysFan", "Setpoint")
 
 ZONE_MODE_TO_HVAC = {
     c.ZONE_MODE_CLOSE: HVACMode.OFF,
@@ -123,14 +126,14 @@ class IZoneSystemClimate(IZoneEntity, ClimateEntity):
     def current_temperature(self) -> float | None:
         zone = self._control_zone
         if zone is not None:
-            return from_centi(self.coordinator.data.zones[zone].get("Temp"))
+            return from_centi(self.coordinator.zone_view(zone).get("Temp"))
         return from_centi(self.system.get("Temp"))
 
     @property
     def target_temperature(self) -> float | None:
         zone = self._control_zone
         if zone is not None:
-            return from_centi(self.coordinator.data.zones[zone].get("Setpoint"))
+            return from_centi(self.coordinator.zone_view(zone).get("Setpoint"))
         return from_centi(self.system.get("Setpoint"))
 
     @property
@@ -140,39 +143,69 @@ class IZoneSystemClimate(IZoneEntity, ClimateEntity):
             "return_temperature": from_centi(self.system.get("Temp")),
             "control_zone": self._control_zone,
             "sleep_timer": self.system.get("SleepTimer"),
+            "pending": self.pending,
         }
 
-    async def async_set_hvac_mode(self, hvac_mode: HVACMode) -> None:
+    @property
+    def pending(self) -> bool:
+        zone = self._control_zone
+        return self.coordinator.is_pending(None, SYS_FIELDS) or (
+            zone is not None and self.coordinator.is_pending(zone, ("Setpoint",))
+        )
+
+    def _power(self, on: bool) -> tuple[dict, list[Step]]:
+        if bool(self.system.get("SysOn")) == on:
+            return {}, []
         client = self.coordinator.client
+        return {(None, "SysOn"): int(on)}, [lambda: client.set_power(on)]
+
+    async def async_set_hvac_mode(self, hvac_mode: HVACMode) -> None:
         if hvac_mode == HVACMode.OFF:
-            await self._run(client.set_power(False))
+            await self.async_turn_off()
             return
-        await self._run(client.set_mode(HVAC_TO_SYS_MODE[hvac_mode]))
-        if not self.system.get("SysOn"):
-            await self._run(client.set_power(True))
+        client = self.coordinator.client
+        mode = HVAC_TO_SYS_MODE[hvac_mode]
+        changes, steps = self._power(True)
+        if self.system.get("SysMode") != mode:
+            # Change mode before powering on, so the unit starts in the right one.
+            changes[(None, "SysMode")] = mode
+            steps.insert(0, lambda: client.set_mode(mode))
+        await self._apply(changes, *steps)
 
     async def async_turn_on(self) -> None:
-        await self._run(self.coordinator.client.set_power(True))
+        changes, steps = self._power(True)
+        await self._apply(changes, *steps)
 
     async def async_turn_off(self) -> None:
-        await self._run(self.coordinator.client.set_power(False))
+        changes, steps = self._power(False)
+        await self._apply(changes, *steps)
 
     async def async_set_fan_mode(self, fan_mode: str) -> None:
-        await self._run(self.coordinator.client.set_fan(HA_TO_SYS_FAN[fan_mode]))
+        fan = HA_TO_SYS_FAN[fan_mode]
+        if self.system.get("SysFan") == fan:
+            return
+        client = self.coordinator.client
+        await self._apply({(None, "SysFan"): fan}, lambda: client.set_fan(fan))
 
     async def async_set_temperature(self, **kwargs: Any) -> None:
         temp = kwargs.get(ATTR_TEMPERATURE)
         if temp is None:
             return
+        client = self.coordinator.client
         zone = self._control_zone
-        if zone is not None:
-            # SysSetpoint is ignored while a zone is in control.
-            mode = self.coordinator.data.zones[zone].get("Mode")
-            await self._run(
-                self.coordinator.client.ensure_zone_setpoint(zone, temp, mode)
+        if zone is None:
+            await self._apply(
+                {(None, "Setpoint"): to_centi(temp)}, lambda: client.set_setpoint(temp)
             )
-        else:
-            await self._run(self.coordinator.client.set_setpoint(temp))
+            return
+        # SysSetpoint is ignored while a zone is in control.
+        mode = self.coordinator.zone_view(zone).get("Mode")
+        changes: dict = {(zone, "Setpoint"): to_centi(temp)}
+        if mode not in (c.ZONE_MODE_AUTO, c.ZONE_MODE_OVERRIDE):
+            changes[(zone, "Mode")] = c.ZONE_MODE_AUTO
+        await self._apply(
+            changes, lambda: client.ensure_zone_setpoint(zone, temp, mode)
+        )
 
 
 class IZoneZoneClimate(IZoneZoneEntity, ClimateEntity):
@@ -236,18 +269,30 @@ class IZoneZoneClimate(IZoneZoneEntity, ClimateEntity):
             "min_airflow": self.zone.get("MinAir"),
             "override": self.zone.get("Mode") == c.ZONE_MODE_OVERRIDE,
             "constant": bool(self.zone.get("ConstA")),
+            "pending": self.pending,
         }
+
+    @property
+    def pending(self) -> bool:
+        # A pending AC power change flips every zone's state too.
+        return self.coordinator.is_pending(self.index) or self.coordinator.is_pending(
+            None, ("SysOn",)
+        )
 
     async def async_set_hvac_mode(self, hvac_mode: HVACMode) -> None:
         if hvac_mode == HVACMode.OFF:
             await self.async_turn_off()
             return
-        mode = HVAC_TO_ZONE_MODE[hvac_mode]
-        current = self.zone.get("Mode")
+        client = self.coordinator.client
+        changes: dict = {}
+        steps: list[Step] = []
         # Override is a flavour of Auto; don't cancel it just to turn on.
-        if ZONE_MODE_TO_HVAC.get(current) != hvac_mode:
-            await self._run(self.coordinator.client.set_zone_mode(self.index, mode))
-        await self._ensure_ac_on()
+        if ZONE_MODE_TO_HVAC.get(self.zone.get("Mode")) != hvac_mode:
+            mode = HVAC_TO_ZONE_MODE[hvac_mode]
+            changes[(self.index, "Mode")] = mode
+            steps.append(lambda: client.set_zone_mode(self.index, mode))
+        self._add_ac_on(changes, steps)
+        await self._apply(changes, *steps)
 
     async def async_turn_on(self) -> None:
         mode = HVACMode.AUTO if self._is_auto_zone else HVACMode.FAN_ONLY
@@ -255,30 +300,44 @@ class IZoneZoneClimate(IZoneZoneEntity, ClimateEntity):
 
     async def async_turn_off(self) -> None:
         client = self.coordinator.client
+        changes: dict = {}
+        steps: list[Step] = []
         if self.zone.get("Mode") != c.ZONE_MODE_CLOSE:
-            await self._run(client.set_zone_mode(self.index, c.ZONE_MODE_CLOSE))
-        if not self.system.get("SysOn"):
-            return
-        # Re-read every zone, so a change made elsewhere (the iZone app, the
-        # wall controller) isn't missed, before deciding the AC can go off.
-        await self.coordinator.async_refresh()
-        if not any(zone_is_on(z) for z in self.coordinator.data.zones.values()):
-            await self._run(client.set_power(False))
+            changes[(self.index, "Mode")] = c.ZONE_MODE_CLOSE
+            steps.append(lambda: client.set_zone_mode(self.index, c.ZONE_MODE_CLOSE))
+        if self.system.get("SysOn"):
+            if not self._other_zones_on():
+                # Most likely outcome, shown now; confirmed after a re-read.
+                changes[(None, "SysOn")] = 0
+            steps.append(self._ac_off_if_no_zones)
+        await self._apply(changes, *steps)
 
     async def async_set_temperature(self, **kwargs: Any) -> None:
         temp = kwargs.get(ATTR_TEMPERATURE)
         if temp is None:
             return
+        client = self.coordinator.client
+        mode = self.zone.get("Mode")
         # The bridge only keeps a setpoint on a zone in Auto, so setting a
         # temperature turns the zone on, and therefore the AC too.
-        await self._run(
-            self.coordinator.client.ensure_zone_setpoint(
-                self.index, temp, self.zone.get("Mode")
-            )
-        )
-        await self._ensure_ac_on()
+        changes: dict = {(self.index, "Setpoint"): to_centi(temp)}
+        if mode not in (c.ZONE_MODE_AUTO, c.ZONE_MODE_OVERRIDE):
+            changes[(self.index, "Mode")] = c.ZONE_MODE_AUTO
+        steps: list[Step] = [
+            lambda: client.ensure_zone_setpoint(self.index, temp, mode)
+        ]
+        self._add_ac_on(changes, steps)
+        await self._apply(changes, *steps)
 
-    async def _ensure_ac_on(self) -> None:
+    def _other_zones_on(self) -> bool:
+        coordinator = self.coordinator
+        return any(
+            zone_is_on(coordinator.zone_view(index))
+            for index in coordinator.data.zones
+            if index != self.index
+        )
+
+    def _add_ac_on(self, changes: dict, steps: list[Step]) -> None:
         """Turn the AC on for this zone alone.
 
         Zones left open when the AC went off show as off, so close them first;
@@ -288,7 +347,20 @@ class IZoneZoneClimate(IZoneZoneEntity, ClimateEntity):
         if self.system.get("SysOn"):
             return
         client = self.coordinator.client
-        for index, zone in self.coordinator.data.zones.items():
-            if index != self.index and zone_is_on(zone):
-                await self._run(client.set_zone_mode(index, c.ZONE_MODE_CLOSE))
-        await self._run(client.set_power(True))
+        for index in self.coordinator.data.zones:
+            if index != self.index and zone_is_on(self.coordinator.zone_view(index)):
+                changes[(index, "Mode")] = c.ZONE_MODE_CLOSE
+                steps.append(
+                    lambda i=index: client.set_zone_mode(i, c.ZONE_MODE_CLOSE)
+                )
+        changes[(None, "SysOn")] = 1
+        steps.append(lambda: client.set_power(True))
+
+    async def _ac_off_if_no_zones(self) -> None:
+        # Re-read every zone, so a change made elsewhere (the iZone app, the
+        # wall controller) isn't missed, before deciding the AC can go off.
+        await self.coordinator.async_refresh()
+        if self._other_zones_on():
+            self.coordinator.forget([(None, "SysOn")])
+        else:
+            await self.coordinator.client.set_power(False)

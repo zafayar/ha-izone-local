@@ -9,6 +9,12 @@ CONF_UID = "uid"
 
 SCAN_INTERVAL = timedelta(seconds=15)
 
+# How long a requested change is shown before the bridge's value wins.
+PENDING_TIMEOUT = 30
+
+# Icon shown while a change is waiting for the bridge.
+PENDING_ICON = "mdi:timer-sand"
+
 # SysMode_e
 MODE_COOL = 1
 MODE_HEAT = 2

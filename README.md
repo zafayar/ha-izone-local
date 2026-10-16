@@ -39,6 +39,24 @@ as "on". Changes made outside Home Assistant (the iZone app, the wall
 controller) are not overridden: turning the AC on there with every zone closed
 leaves it on.
 
+### Instant feedback
+
+The bridge needs commands about 1.5 s apart, so an action such as turning on a
+zone while the AC is off takes a few seconds. So that the UI doesn't sit still
+meanwhile:
+
+- **The change shows straight away.** Pressing a button updates the entities
+  at once (for example the zone to Auto and the AC to on), before any command
+  is sent.
+- **An hourglass icon (`mdi:timer-sand`) and a `pending: true` attribute**
+  show on every entity whose state is waiting for the bridge to confirm. A
+  change to the AC's power affects every zone, so it marks them all.
+- **The bridge's state wins.** The hourglass clears once a re-read shows the
+  change, usually 1–2 s after the last command. If a command fails, the entity
+  goes back to the bridge's state at once and Home Assistant shows the error.
+  If the bridge accepts a command but never reports the change, the entity goes
+  back after 30 s.
+
 ### Names
 
 Names come from the system itself:
@@ -72,8 +90,10 @@ recognises the bridge by its ID and updates the existing entry.
   `POST /iZoneRequestV2`. Requests are sent one at a time because the bridge is
   a small embedded device.
 - **Commands:** sent to `POST /iZoneCommandV2` (for example `{"SysOn": 1}` or
-  `{"ZoneMode": {"Index": 0, "Mode": 3}}`). The bridge replies `OK`, and the
-  integration polls again straight away.
+  `{"ZoneMode": {"Index": 0, "Mode": 3}}`). The bridge replies `OK`. After
+  the last command of an action the integration re-reads the bridge once, and
+  again after 1, 2, 3, 5 and 8 s until the bridge reports the change (it takes
+  0–2 s to do so).
 - **Temperatures:** the API sends whole numbers in hundredths of a degree
   (2350 = 23.5 °C). Setpoints are limited to 15–30 °C in 0.5° steps.
 

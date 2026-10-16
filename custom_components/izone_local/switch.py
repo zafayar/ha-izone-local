@@ -32,8 +32,22 @@ class IZoneISaveSwitch(IZoneEntity, SwitchEntity):
     def is_on(self) -> bool:
         return bool(self.system.get("iSaveOn"))
 
+    @property
+    def pending(self) -> bool:
+        return self.coordinator.is_pending(None, ("iSaveOn",))
+
+    @property
+    def extra_state_attributes(self) -> dict[str, Any]:
+        return {"pending": self.pending}
+
     async def async_turn_on(self, **kwargs: Any) -> None:
-        await self._run(self.coordinator.client.set_isave(True))
+        await self._set(True)
 
     async def async_turn_off(self, **kwargs: Any) -> None:
-        await self._run(self.coordinator.client.set_isave(False))
+        await self._set(False)
+
+    async def _set(self, on: bool) -> None:
+        if self.is_on == on:
+            return
+        client = self.coordinator.client
+        await self._apply({(None, "iSaveOn"): int(on)}, lambda: client.set_isave(on))
