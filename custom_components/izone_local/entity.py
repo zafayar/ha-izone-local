@@ -10,7 +10,7 @@ from homeassistant.helpers.device_registry import DeviceInfo
 from homeassistant.helpers.update_coordinator import CoordinatorEntity
 
 from .api import IZoneError
-from .const import DOMAIN, MANUFACTURER
+from .const import DOMAIN, brand_name, system_name, unit_model
 from .coordinator import IZoneCoordinator
 
 
@@ -22,11 +22,12 @@ class IZoneEntity(CoordinatorEntity[IZoneCoordinator]):
     def __init__(self, coordinator: IZoneCoordinator, key: str) -> None:
         super().__init__(coordinator)
         self._attr_unique_id = f"{coordinator.uid}_{key}"
+        system = coordinator.data.system
         self._attr_device_info = DeviceInfo(
             identifiers={(DOMAIN, coordinator.uid)},
-            manufacturer=MANUFACTURER,
-            model="iZone air conditioning",
-            name="iZone",
+            manufacturer=brand_name(system),
+            model=unit_model(system),
+            name=system_name(system),
         )
 
     @property
@@ -50,8 +51,8 @@ class IZoneZoneEntity(IZoneEntity):
         self.index = index
         self._attr_device_info = DeviceInfo(
             identifiers={(DOMAIN, f"{coordinator.uid}_zone{index}")},
-            manufacturer=MANUFACTURER,
-            model="iZone zone",
+            manufacturer=brand_name(coordinator.data.system),
+            model=f"{brand_name(coordinator.data.system)} zone",
             name=self.zone.get("Name") or f"Zone {index + 1}",
             via_device=(DOMAIN, coordinator.uid),
         )

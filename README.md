@@ -18,6 +18,18 @@ It does not use the cloud.
 | Binary sensors | Filter warning, AC fault; zone sensor fault and damper fault. |
 | Switch | iSave (only if the system has iSave enabled). |
 
+Names come from the system itself:
+
+- **AC device name:** the name shown on the wall controller (`Tag1`, e.g.
+  "Ghar"), or the brand if that is empty.
+- **Manufacturer:** the brand the system is sold under (`OemMake`, e.g.
+  "Rinnai").
+- **AC model:** the detected unit (`AcUnitBrand`, e.g. "Rinnai 20kW").
+- **Integration entry:** brand plus name, e.g. "Rinnai Ghar".
+
+The brand and unit lists are from `iZone_JSON_datastrings.h` v1.41. Unknown
+values fall back to "iZone".
+
 ## Install
 
 1. Copy `custom_components/izone_local` into your Home Assistant `config/custom_components/` folder. Or add this repo to HACS as a custom repository (Integration).

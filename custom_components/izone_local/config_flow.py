@@ -12,7 +12,7 @@ from homeassistant.const import CONF_HOST
 from homeassistant.helpers.aiohttp_client import async_get_clientsession
 
 from .api import DiscoveredBridge, IZoneClient, IZoneError, async_discover
-from .const import CONF_UID, DOMAIN
+from .const import CONF_UID, DOMAIN, brand_name
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -80,7 +80,7 @@ class IZoneLocalConfigFlow(ConfigFlow, domain=DOMAIN):
     ) -> ConfigFlowResult | None:
         client = IZoneClient(async_get_clientsession(self.hass), host)
         try:
-            uid, _ = await client.get_system()
+            uid, system = await client.get_system()
         except IZoneError as err:
             _LOGGER.debug("Cannot connect to %s: %s", host, err)
             if errors is None:
@@ -92,6 +92,9 @@ class IZoneLocalConfigFlow(ConfigFlow, domain=DOMAIN):
         await self.async_set_unique_id(uid)
         # If the bridge moved to a new DHCP address, update the existing entry.
         self._abort_if_unique_id_configured(updates={CONF_HOST: host})
+        # e.g. "Rinnai Ghar", or "Rinnai 000012345" if the system has no Tag1.
+        tag = str(system.get("Tag1") or "").strip()
         return self.async_create_entry(
-            title=f"iZone {uid}", data={CONF_HOST: host, CONF_UID: uid}
+            title=f"{brand_name(system)} {tag or uid}",
+            data={CONF_HOST: host, CONF_UID: uid},
         )
