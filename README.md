@@ -259,3 +259,21 @@ logger:
   logs:
     custom_components.izone_local: debug
 ```
+
+## Development
+
+The tests run against a fake bridge, with small stand-ins for the parts of
+Home Assistant the integration uses, so all they need is `aiohttp`:
+
+```bash
+python -m unittest discover -s tests -v
+```
+
+Each scenario in `tests/scenarios/` can also be run on its own and prints a
+line per check. `tests/live/` has scripts that drive a real bridge and then
+restore it (see its README). CI (`.github/workflows/ci.yml`) runs the tests,
+Home Assistant's hassfest validation and the HACS validation.
+
+The HACS validation also needs the repository published on GitHub with a
+description and topics, and `issue_tracker`, `documentation` and
+`codeowners` set in `manifest.json`.
