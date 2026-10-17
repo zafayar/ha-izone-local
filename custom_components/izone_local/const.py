@@ -56,6 +56,8 @@ FAN_MED = 2
 FAN_HIGH = 3
 FAN_AUTO = 4
 FAN_TOP = 5
+FAN_QUIET = 6  # shown if the unit reports it; not offered
+FAN_TURBO = 7
 
 # ZoneMode_e
 ZONE_MODE_OPEN = 1

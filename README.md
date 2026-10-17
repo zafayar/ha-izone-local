@@ -103,6 +103,18 @@ state_content:
   - status
 ```
 
+### Temperatures and modes
+
+- The setpoint range is 15–30 °C in 0.5° steps, or the controller's eco-lock
+  limits while the eco lock is on. Setpoints outside the range are brought
+  within it.
+- `climate.set_temperature` can include an `hvac_mode`. On the AC both are
+  applied together. A zone set to `off` or `fan_only` that way skips the
+  temperature (a zone only holds one in `auto`, and the controller would
+  switch it back to `auto` to take it).
+- Heat, cool and dry are whole-unit modes, set on the AC. Asking a zone for
+  one gives a clear error.
+
 ### Favourites
 
 Each favourite saved in the iZone app (AC mode, fan and per-zone settings)

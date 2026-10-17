@@ -2,9 +2,11 @@
 
 from __future__ import annotations
 
+import logging
 from typing import Any
 
 from homeassistant.components.climate import (
+    ATTR_HVAC_MODE,
     FAN_AUTO,
     FAN_HIGH,
     FAN_LOW,
@@ -15,12 +17,15 @@ from homeassistant.components.climate import (
 )
 from homeassistant.const import ATTR_TEMPERATURE, UnitOfTemperature
 from homeassistant.core import HomeAssistant
+from homeassistant.exceptions import ServiceValidationError
 from homeassistant.helpers.entity_platform import AddConfigEntryEntitiesCallback
 
 from . import const as c
 from .api import from_centi, to_centi
 from .coordinator import IZoneConfigEntry, IZoneCoordinator, PendingKey
 from .entity import IZoneEntity, IZoneZoneEntity
+
+_LOGGER = logging.getLogger(__name__)
 
 FAN_TOP = "top"
 
@@ -40,6 +45,9 @@ SYS_FAN_TO_HA = {
     c.FAN_AUTO: FAN_AUTO,
     c.FAN_TOP: FAN_TOP,
 }
+FAN_MODES = list(SYS_FAN_TO_HA.values())
+# Speeds some units report but that aren't offered.
+SYS_FAN_TO_HA |= {c.FAN_QUIET: "quiet", c.FAN_TURBO: "turbo"}
 HA_TO_SYS_FAN = {v: k for k, v in SYS_FAN_TO_HA.items()}
 
 # System fields the AC entity changes; a pending one shows its hourglass.
@@ -58,6 +66,30 @@ HVAC_TO_ZONE_MODE = {
     HVACMode.AUTO: c.ZONE_MODE_AUTO,
 }
 
+class _TemperatureLimits:
+    """The setpoint range: the eco-lock limits while the lock is on."""
+
+    system: dict[str, Any]
+
+    def _eco(self, field: str) -> float | None:
+        if not self.system.get("EcoLock"):
+            return None
+        return from_centi(self.system.get(field))
+
+    @property
+    def min_temp(self) -> float:
+        low = self._eco("EcoMin")
+        return max(c.MIN_TEMP, low) if low else c.MIN_TEMP
+
+    @property
+    def max_temp(self) -> float:
+        high = self._eco("EcoMax")
+        return min(c.MAX_TEMP, high) if high else c.MAX_TEMP
+
+    def _clamped(self, temp: float) -> float:
+        return min(max(float(temp), self.min_temp), self.max_temp)
+
+
 async def async_setup_entry(
     hass: HomeAssistant,
     entry: IZoneConfigEntry,
@@ -75,16 +107,14 @@ async def async_setup_entry(
     async_add_entities(entities)
 
 
-class IZoneSystemClimate(IZoneEntity, ClimateEntity):
+class IZoneSystemClimate(_TemperatureLimits, IZoneEntity, ClimateEntity):
     """The ducted AC unit itself."""
 
     _attr_name = None  # use the device name
     _attr_temperature_unit = UnitOfTemperature.CELSIUS
     _attr_target_temperature_step = c.TEMP_STEP
-    _attr_min_temp = c.MIN_TEMP
-    _attr_max_temp = c.MAX_TEMP
     _attr_hvac_modes = [HVACMode.OFF, *SYS_MODE_TO_HVAC.values()]
-    _attr_fan_modes = list(SYS_FAN_TO_HA.values())
+    _attr_fan_modes = FAN_MODES
     _attr_supported_features = (
         ClimateEntityFeature.TARGET_TEMPERATURE
         | ClimateEntityFeature.FAN_MODE
@@ -149,15 +179,18 @@ class IZoneSystemClimate(IZoneEntity, ClimateEntity):
             return {}
         return {(None, "SysOn"): int(on)}
 
-    async def async_set_hvac_mode(self, hvac_mode: HVACMode) -> None:
+    def _mode_changes(self, hvac_mode: HVACMode) -> dict[PendingKey, Any]:
         if hvac_mode == HVACMode.OFF:
-            await self.async_turn_off()
-            return
-        mode = HVAC_TO_SYS_MODE[hvac_mode]
+            return self._power(False)
+        if hvac_mode not in HVAC_TO_SYS_MODE:
+            raise ServiceValidationError(f"The AC has no '{hvac_mode}' mode")
         changes = self._power(True)
-        if self.system.get("SysMode") != mode:
-            changes[(None, "SysMode")] = mode
-        await self._apply(changes)
+        if self.system.get("SysMode") != HVAC_TO_SYS_MODE[hvac_mode]:
+            changes[(None, "SysMode")] = HVAC_TO_SYS_MODE[hvac_mode]
+        return changes
+
+    async def async_set_hvac_mode(self, hvac_mode: HVACMode) -> None:
+        await self._apply(self._mode_changes(hvac_mode))
 
     async def async_turn_on(self) -> None:
         await self._apply(self._power(True))
@@ -171,22 +204,27 @@ class IZoneSystemClimate(IZoneEntity, ClimateEntity):
             await self._apply({(None, "SysFan"): fan})
 
     async def async_set_temperature(self, **kwargs: Any) -> None:
-        temp = kwargs.get(ATTR_TEMPERATURE)
-        if temp is None:
-            return
+        # A mode can come with the temperature; both go in one request.
+        changes: dict[PendingKey, Any] = {}
+        if (hvac_mode := kwargs.get(ATTR_HVAC_MODE)) is not None:
+            changes |= self._mode_changes(hvac_mode)
+        if (temp := kwargs.get(ATTR_TEMPERATURE)) is not None:
+            changes |= self._temperature_changes(to_centi(self._clamped(temp)))
+        await self._apply(changes)
+
+    def _temperature_changes(self, setpoint: int) -> dict[PendingKey, Any]:
         zone = self._control_zone
         if zone is None:
-            await self._apply({(None, "Setpoint"): to_centi(temp)})
-            return
+            return {(None, "Setpoint"): setpoint}
         # SysSetpoint is ignored while a zone is in control.
-        changes: dict[PendingKey, Any] = {(zone, "Setpoint"): to_centi(temp)}
+        changes: dict[PendingKey, Any] = {(zone, "Setpoint"): setpoint}
         mode = self.coordinator.zone_view(zone).get("Mode")
         if mode not in (c.ZONE_MODE_AUTO, c.ZONE_MODE_OVERRIDE):
             changes[(zone, "Mode")] = c.ZONE_MODE_AUTO
-        await self._apply(changes)
+        return changes
 
 
-class IZoneZoneClimate(IZoneZoneEntity, ClimateEntity):
+class IZoneZoneClimate(_TemperatureLimits, IZoneZoneEntity, ClimateEntity):
     """One zone: closed (off), open (fan only) or temperature controlled (auto).
 
     The AC's power follows the zones: turning a zone on turns the AC on, and
@@ -197,8 +235,6 @@ class IZoneZoneClimate(IZoneZoneEntity, ClimateEntity):
     _attr_name = None
     _attr_temperature_unit = UnitOfTemperature.CELSIUS
     _attr_target_temperature_step = c.TEMP_STEP
-    _attr_min_temp = c.MIN_TEMP
-    _attr_max_temp = c.MAX_TEMP
 
     def __init__(self, coordinator: IZoneCoordinator, index: int) -> None:
         super().__init__(coordinator, index, "climate")
@@ -257,7 +293,15 @@ class IZoneZoneClimate(IZoneZoneEntity, ClimateEntity):
         # A change to the AC's power flips every zone's state too.
         return key[0] == self.index or key == (None, "SysOn")
 
+    def _check_mode(self, hvac_mode: HVACMode) -> None:
+        if hvac_mode not in self.hvac_modes:
+            raise ServiceValidationError(
+                f"A zone can only be {', '.join(self.hvac_modes)}; heat, cool and "
+                "dry are set on the AC itself"
+            )
+
     async def async_set_hvac_mode(self, hvac_mode: HVACMode) -> None:
+        self._check_mode(hvac_mode)
         if hvac_mode == HVACMode.OFF:
             await self.async_turn_off()
             return
@@ -282,12 +326,25 @@ class IZoneZoneClimate(IZoneZoneEntity, ClimateEntity):
         await self._apply(changes, ac_off_unless_zones_on=True)
 
     async def async_set_temperature(self, **kwargs: Any) -> None:
+        hvac_mode = kwargs.get(ATTR_HVAC_MODE)
+        if hvac_mode is not None:
+            self._check_mode(hvac_mode)
+            if hvac_mode != HVACMode.AUTO:
+                # The bridge would switch the zone back to Auto to take a
+                # temperature, so honour the mode and skip the temperature.
+                _LOGGER.warning(
+                    "%s: set to %s; a temperature only applies in auto",
+                    self.entity_id, hvac_mode,
+                )
+                await self.async_set_hvac_mode(hvac_mode)
+                return
         temp = kwargs.get(ATTR_TEMPERATURE)
         if temp is None:
             return
         # The bridge only keeps a setpoint on a zone in Auto, so setting a
         # temperature turns the zone on, and therefore the AC too.
-        changes: dict[PendingKey, Any] = {(self.index, "Setpoint"): to_centi(temp)}
+        setpoint = to_centi(self._clamped(temp))
+        changes: dict[PendingKey, Any] = {(self.index, "Setpoint"): setpoint}
         if self.zone.get("Mode") not in (c.ZONE_MODE_AUTO, c.ZONE_MODE_OVERRIDE):
             changes[(self.index, "Mode")] = c.ZONE_MODE_AUTO
         await self._apply(changes | self._ac_on())
