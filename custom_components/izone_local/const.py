@@ -25,6 +25,11 @@ SENSOR_WAIT = 12 * 3600
 # favourite wait this long.
 FAVOURITE_SETTLE = 60
 
+# Health: the "bridge problem" sensor turns on after this many failures (a
+# change that couldn't be applied, or a failed read) within the window.
+FAILURE_WINDOW = 300
+FAILURE_THRESHOLD = 3
+
 # Progress shown in each entity's "status" attribute, with its icon.
 STATUS_READY = "ready"
 STATUS_QUEUED = "queued"

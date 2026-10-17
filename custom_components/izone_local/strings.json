@@ -24,7 +24,8 @@
       "filter_warning": { "name": "Filter warning" },
       "ac_error": { "name": "AC fault" },
       "sensor_fault": { "name": "Sensor fault" },
-      "damper_fault": { "name": "Damper fault" }
+      "damper_fault": { "name": "Damper fault" },
+      "bridge_problem": { "name": "Bridge problem" }
     },
     "sensor": {
       "supply_temperature": { "name": "Supply air temperature" },

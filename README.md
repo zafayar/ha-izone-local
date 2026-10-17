@@ -15,7 +15,7 @@ It does not use the cloud.
 | AC climate | Off / Cool / Heat / Fan only / Dry / Heat-Cool (iZone "Auto"); fan low, medium, high, auto, top. When a control zone is set (`CtrlZone`), the target and current temperature come from that zone. |
 | Zone climate (one per zone, on its own device named after the zone) | Off = damper closed (or the AC is off), Fan only = open, Auto = temperature-controlled (only on zones of type Auto). Setting a temperature on a closed or open zone switches it to Auto. Zones also switch the AC on and off; see below. Bypass zones get no climate entity, because the system controls them itself. |
 | Sensors | Supply air temperature, return air temperature, AC error code; zone temperature and damper position. |
-| Binary sensors | Filter warning, AC fault; zone sensor fault and damper fault. |
+| Binary sensors | Filter warning, AC fault, bridge problem; zone sensor fault and damper fault. |
 | Switch | iSave (only if the system has iSave enabled). |
 | Scenes | One per favourite saved on the controller (see below). |
 
@@ -133,6 +133,34 @@ zone whatever is still missing. The entities show the progress meanwhile.
 If the favourite needs a zone whose sensor is out, the controller refuses the
 whole favourite. The integration then applies it zone by zone instead, and
 that zone waits for its sensor.
+
+### Bridge health and diagnostics
+
+The **Bridge problem** binary sensor turns on after 3 failures within 5
+minutes (a change the bridge didn't apply, or a failed read), with the count
+in its `recent_failures` attribute. It stays available while the bridge is
+unreachable, so an automation can act on it, for example power-cycling the
+bridge with a smart plug:
+
+```yaml
+automation:
+  - alias: Power-cycle the iZone bridge when it keeps failing
+    triggers:
+      - trigger: state
+        entity_id: binary_sensor.ghar_bridge_problem
+        to: "on"
+        for: "00:02:00"
+    actions:
+      - action: switch.turn_off
+        target: { entity_id: switch.izone_bridge_power }
+      - delay: "00:00:20"
+      - action: switch.turn_on
+        target: { entity_id: switch.izone_bridge_power }
+```
+
+For issue reports, **Download diagnostics** on the AC's device page gives the
+raw system, zone and favourite data and any pending changes. The bridge's
+password and lock code, its IP address and its ID are removed.
 
 ### Names
 

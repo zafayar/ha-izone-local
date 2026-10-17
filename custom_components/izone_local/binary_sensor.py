@@ -71,6 +71,7 @@ async def async_setup_entry(
     entities: list[BinarySensorEntity] = [
         IZoneSystemBinary(coordinator, desc) for desc in SYSTEM_BINARY
     ]
+    entities.append(IZoneBridgeProblem(coordinator))
     for index, zone in coordinator.data.zones.items():
         has_sensor = zone.get("SensType") != SENS_TYPE_NONE
         entities.extend(
@@ -110,3 +111,30 @@ class IZoneZoneBinary(IZoneZoneEntity, BinarySensorEntity):
     @property
     def is_on(self) -> bool | None:
         return self.entity_description.value_fn(self.zone)
+
+
+class IZoneBridgeProblem(IZoneEntity, BinarySensorEntity):
+    """On when changes or reads keep failing (3 in 5 minutes).
+
+    Stays available while the bridge can't be reached, so an automation can
+    act on it (e.g. power-cycle the bridge with a smart plug).
+    """
+
+    _attr_translation_key = "bridge_problem"
+    _attr_device_class = BinarySensorDeviceClass.PROBLEM
+    _attr_entity_category = EntityCategory.DIAGNOSTIC
+
+    def __init__(self, coordinator: IZoneCoordinator) -> None:
+        super().__init__(coordinator, "bridge_problem")
+
+    @property
+    def available(self) -> bool:
+        return True
+
+    @property
+    def is_on(self) -> bool:
+        return self.coordinator.bridge_problem
+
+    @property
+    def extra_state_attributes(self) -> dict[str, Any]:
+        return {"recent_failures": self.coordinator.recent_failures}

@@ -5,6 +5,7 @@ from __future__ import annotations
 import asyncio
 import logging
 import time
+from collections import deque
 from collections.abc import Awaitable, Callable, Coroutine
 from dataclasses import dataclass, field
 from typing import Any
@@ -101,6 +102,7 @@ class IZoneCoordinator(DataUpdateCoordinator[IZoneData]):
         self._requests: list[_Request] = []
         self._failed: dict[PendingKey, float] = {}  # key -> show "failed" until
         self._loop_task: asyncio.Task | None = None
+        self._failures: deque[float] = deque(maxlen=64)  # monotonic times
 
     async def _async_update_data(self) -> IZoneData:
         try:
@@ -109,6 +111,7 @@ class IZoneCoordinator(DataUpdateCoordinator[IZoneData]):
             for index in range(int(system.get("NoOfZones", 0))):
                 zones[index] = await self.client.get_zone(index)
         except IZoneError as err:
+            self._failures.append(time.monotonic())
             raise UpdateFailed(str(err)) from err
         data = IZoneData(system=system, zones=zones)
         self._settle(data)
@@ -244,6 +247,38 @@ class IZoneCoordinator(DataUpdateCoordinator[IZoneData]):
             return c.STATUS_QUEUED
         return f"{c.STATUS_SENDING} ({sent} of {len(keys)})"
 
+    # Health and diagnostics ---------------------------------------------
+
+    @property
+    def recent_failures(self) -> int:
+        """Failed changes and reads within FAILURE_WINDOW."""
+        since = time.monotonic() - c.FAILURE_WINDOW
+        while self._failures and self._failures[0] < since:
+            self._failures.popleft()
+        return len(self._failures)
+
+    @property
+    def bridge_problem(self) -> bool:
+        """Failing often enough that something needs attention (e.g. a
+        power cycle of the bridge from an automation)."""
+        return self.recent_failures >= c.FAILURE_THRESHOLD
+
+    def pending_for_diagnostics(self) -> list[dict[str, Any]]:
+        now = time.monotonic()
+        return [
+            {
+                "where": self._describe(key),
+                "field": key[1],
+                "value": want.value,
+                "attempts": want.attempts,
+                "sent_seconds_ago": (
+                    round(now - want.sent_at, 1) if want.sent_at else None
+                ),
+                "waiting_for_sensor": want.waiting_for_sensor,
+            }
+            for key, want in self._wants.items()
+        ]
+
     def notify_changed(self) -> None:
         """The bridge broadcast that something changed: read it soon.
 
@@ -276,6 +311,7 @@ class IZoneCoordinator(DataUpdateCoordinator[IZoneData]):
                     await self._sync()
                 except IZoneError as err:
                     _LOGGER.debug("Sync failed, will retry: %s", err)
+                    self._failures.append(time.monotonic())
                     self._settle(None)  # still let deadlines expire
                 if not self._has_work():
                     break
@@ -289,12 +325,6 @@ class IZoneCoordinator(DataUpdateCoordinator[IZoneData]):
                 )
         finally:
             self._settle(None)
-            self.async_update_listeners()
-        # Clear the "failed" status once it has been shown.
-        if self._failed:
-            await asyncio.sleep(c.FAILED_SHOW)
-            now = time.monotonic()
-            self._failed = {k: t for k, t in self._failed.items() if t > now}
             self.async_update_listeners()
 
     async def _sync(self) -> None:
@@ -383,6 +413,11 @@ class IZoneCoordinator(DataUpdateCoordinator[IZoneData]):
             want.deadline = now + c.PENDING_TIMEOUT
         return False
 
+    def _clear_failed(self) -> None:
+        now = time.monotonic()
+        self._failed = {k: t for k, t in self._failed.items() if t > now}
+        self.async_update_listeners()
+
     def _describe(self, key: PendingKey) -> str:
         index, _ = key
         if index is None:
@@ -393,7 +428,11 @@ class IZoneCoordinator(DataUpdateCoordinator[IZoneData]):
         want = self._wants.pop(key)
         message = f"{self._describe(key)} {key[1]}={want.value}: {reason}"
         _LOGGER.warning("Change not applied: %s", message)
+        self._failures.append(time.monotonic())
         self._failed[key] = time.monotonic() + c.FAILED_SHOW
+        # A timer, not the loop, clears it: a lingering loop would look busy
+        # to the next request and never pick it up.
+        asyncio.get_running_loop().call_later(c.FAILED_SHOW, self._clear_failed)
         for request in self._requests:
             if key in request.keys:
                 request.errors.append(message)
