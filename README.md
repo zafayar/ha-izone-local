@@ -1,5 +1,7 @@
 # iZone Local (API v2) for Home Assistant
 
+[![Open your Home Assistant instance and open this repository in HACS.](https://my.home-assistant.io/badges/hacs_repository.svg)](https://my.home-assistant.io/redirect/hacs_repository/?owner=zafayar&repository=ha-izone-local&category=integration)
+
 A custom integration for iZone ducted air conditioning that talks to the bridge
 over your LAN with the [iZone local API v2](https://developer.izone.com.au/docs/getting-started/local/).
 It does not use the cloud.
@@ -179,9 +181,22 @@ values fall back to "iZone".
 
 ## Install
 
-1. Copy `custom_components/izone_local` into your Home Assistant `config/custom_components/` folder. Or add this repo to HACS as a custom repository (Integration).
-2. Restart Home Assistant.
+**With HACS (recommended):**
+
+1. Click the **Open in HACS** badge above, or in HACS open the ⋮ menu →
+   **Custom repositories**, add `https://github.com/zafayar/ha-izone-local`
+   with the type **Integration**.
+2. Install **iZone Local (API v2)**, then restart Home Assistant.
 3. Go to **Settings → Devices & services → Add integration → iZone Local**.
+
+HACS offers updates as new releases are published.
+
+**By hand:** copy `custom_components/izone_local` into your Home Assistant
+`config/custom_components/` folder, restart, then add the integration as in
+step 3.
+
+Home Assistant 2025.2 or later is needed. The integration's icon shows from
+2026.3 (earlier versions show a placeholder).
 
 Setup broadcasts `IASD` on UDP port 12107 to find bridges. If nothing answers
 (for example, Home Assistant is in Docker without host networking, or on
@@ -274,6 +289,9 @@ line per check. `tests/live/` has scripts that drive a real bridge and then
 restore it (see its README). CI (`.github/workflows/ci.yml`) runs the tests,
 Home Assistant's hassfest validation and the HACS validation.
 
-The HACS validation also needs the repository published on GitHub with a
-description and topics, and `issue_tracker`, `documentation` and
-`codeowners` set in `manifest.json`.
+The HACS validation also checks the GitHub repository itself: it needs a
+description, topics (for example `home-assistant`, `hacs`, `izone`) and
+issues turned on.
+
+To release: set `version` in `manifest.json`, commit, then publish a GitHub
+release tagged with the same version (for example `v0.5.0`).

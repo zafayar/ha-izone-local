@@ -1,11 +1,12 @@
 {
   "domain": "izone_local",
   "name": "iZone Local (API v2)",
-  "codeowners": [],
+  "codeowners": ["@zafayar"],
   "config_flow": true,
-  "documentation": "https://developer.izone.com.au/docs/getting-started/local/",
+  "documentation": "https://github.com/zafayar/ha-izone-local",
   "integration_type": "hub",
   "iot_class": "local_polling",
+  "issue_tracker": "https://github.com/zafayar/ha-izone-local/issues",
   "requirements": [],
   "version": "0.5.0"
 }
