@@ -171,6 +171,18 @@ class IZoneCoordinator(DataUpdateCoordinator[IZoneData]):
             return c.STATUS_QUEUED
         return f"{c.STATUS_SENDING} ({sent} of {len(keys)})"
 
+    def notify_changed(self) -> None:
+        """The bridge broadcast that something changed: read it soon.
+
+        Ignored while the reconcile loop runs, since it's reading anyway. The
+        refresh is debounced, so a burst of broadcasts costs one read.
+        """
+        if self._loop_task is not None and not self._loop_task.done():
+            return
+        self.config_entry.async_create_background_task(
+            self.hass, self.async_request_refresh(), f"{c.DOMAIN} notified {self.uid}"
+        )
+
     # The reconcile loop --------------------------------------------------
 
     def _has_work(self) -> bool:

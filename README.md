@@ -133,7 +133,13 @@ recognises the bridge by its ID and updates the existing entry.
 - **Polling:** every 15 seconds the integration makes one `Type 1` request
   (system) and one `Type 2` request for each zone, all to
   `POST /iZoneRequestV2`. Requests are sent one at a time because the bridge is
-  a small embedded device.
+  a small embedded device. A dropped request or server error is retried twice
+  before an entity goes unavailable.
+- **Change broadcasts:** a few seconds after any change (including ones made
+  at the wall controller or in the iZone app) the bridge broadcasts
+  `iZoneChanged_*` on UDP 7005, and the integration reads it straight away.
+  Broadcasts only reach Home Assistant on the bridge's subnet (and, in Docker,
+  with host networking); otherwise such changes show at the next poll.
 - **Commands:** sent to `POST /iZoneCommandV2` (for example `{"SysOn": 1}` or
   `{"ZoneMode": {"Index": 0, "Mode": 3}}`). The bridge replies `OK`, and
   reports the change 0–2 s later. See "How changes are applied" above.

@@ -12,12 +12,14 @@ Temperatures are integers in hundredths of a degree (2350 == 23.5 C).
 from __future__ import annotations
 
 import asyncio
+import contextlib
 import json
 import logging
 import math
 import re
 import socket
 import time
+from collections.abc import Callable
 from dataclasses import dataclass, field
 from typing import Any
 
@@ -27,6 +29,8 @@ _LOGGER = logging.getLogger(__name__)
 
 DISCOVERY_PORT = 12107
 DISCOVERY_MESSAGE = b"IASD"
+NOTIFY_PORT = 7005
+NOTIFY_PREFIX = b"iZoneChanged"
 REQUEST_TIMEOUT = 10
 # Waits before retrying a dropped request or server error (then it fails).
 CONNECT_RETRY_DELAYS = (0.5, 1.5)
@@ -123,6 +127,46 @@ async def async_discover(
     finally:
         transport.close()
     return list(protocol.found.values())
+
+
+class _NotifyProtocol(asyncio.DatagramProtocol):
+    def __init__(self, source: str, on_change: Callable[[str], None]) -> None:
+        self._source = source
+        self._on_change = on_change
+
+    def datagram_received(self, data: bytes, addr: tuple[str, int]) -> None:
+        if addr[0] == self._source and data.startswith(NOTIFY_PREFIX):
+            self._on_change(data.decode("ascii", errors="replace"))
+
+
+async def async_listen_for_changes(
+    bridge_ip: str, on_change: Callable[[str], None], port: int = NOTIFY_PORT
+) -> asyncio.DatagramTransport | None:
+    """Call `on_change` when the bridge broadcasts that something changed.
+
+    The bridge broadcasts content-free "iZoneChanged_System" / "_Zones" /
+    "_Schedules" on UDP 7005 a few seconds after any real change, wherever it
+    came from. Broadcasts only reach hosts on the bridge's subnet, so this is
+    a hint on top of polling. Returns None if the port can't be opened.
+    """
+    loop = asyncio.get_running_loop()
+    sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM, socket.IPPROTO_UDP)
+    try:
+        # Let several bridges (config entries) share the port.
+        sock.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
+        if hasattr(socket, "SO_REUSEPORT"):
+            with contextlib.suppress(OSError):
+                sock.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEPORT, 1)
+        sock.setblocking(False)
+        sock.bind(("", port))
+        transport, _ = await loop.create_datagram_endpoint(
+            lambda: _NotifyProtocol(bridge_ip, on_change), sock=sock
+        )
+    except OSError as err:
+        sock.close()
+        _LOGGER.info("Can't listen for change broadcasts on UDP %s: %s", port, err)
+        return None
+    return transport
 
 
 class IZoneClient:
