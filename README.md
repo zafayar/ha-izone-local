@@ -58,6 +58,19 @@ The action finishes when the bridge shows the change, so automations that
 call it wait until the AC has actually responded. If it can't be applied, the
 entity goes back to the bridge's state and the action raises an error.
 
+Two cases are handled specially:
+
+- **Changed elsewhere.** If a value moves somewhere neither the bridge nor
+  Home Assistant was heading (someone used the wall controller or the iZone
+  app), that newer change wins: the integration stops re-sending, without an
+  error.
+- **A zone sensor has dropped out.** The controller then reports the zone as
+  closed and remembers its real mode, and it can't take Auto or a temperature
+  until the sensor is back. Such a change waits for the sensor (up to 12 h)
+  instead of failing, with the status `waiting for sensor`, and is applied
+  when the sensor returns. The zone shows no temperature meanwhile, and it
+  doesn't count as "on" when deciding whether the AC can turn off.
+
 Measured on a real bridge: turning on a zone while the AC is on is confirmed
 in about 0.7 s. Turning on a zone while the AC is off (one other zone to close
 first, then the AC on) takes about 3.7 s.
@@ -74,6 +87,7 @@ matching icon:
 | `sending (1 of 2)` | `mdi:sync` | Commands for this change are going out. |
 | `confirming` | `mdi:sync` | Sent; waiting for the bridge to report it. |
 | `failed` | `mdi:alert-circle-outline` | The bridge didn't apply it (shown for 10 s). |
+| `waiting for sensor` | `mdi:thermometer-off` | The zone's sensor is out; applied when it's back. |
 
 A change to the AC's power changes every zone's state, so it shows on every
 zone. There's also a `pending: true` attribute while anything is unconfirmed.

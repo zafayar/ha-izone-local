@@ -24,6 +24,8 @@ type IZoneConfigEntry = ConfigEntry[IZoneCoordinator]
 # index for the system datagram. E.g. (2, "Mode"), (None, "SysOn").
 type PendingKey = tuple[int | None, str]
 
+_UNSEEN = object()  # a want's last_seen before the first sync after the request
+
 
 @dataclass
 class IZoneData:
@@ -42,6 +44,12 @@ class _Want:
     # Turning the AC off because the last zone was closed: only goes ahead if,
     # on fresh data, no zone is on.
     unless_zones_on: bool = False
+    # The bridge's value at the previous sync. If it moves somewhere other
+    # than what we asked for, someone else (the app, the wall controller)
+    # changed it, and their newer change wins.
+    last_seen: Any = _UNSEEN
+    # The zone's sensor has dropped out; nothing is sent until it's back.
+    waiting_for_sensor: bool = False
 
 
 @dataclass
@@ -97,6 +105,7 @@ class IZoneCoordinator(DataUpdateCoordinator[IZoneData]):
             raise UpdateFailed(str(err)) from err
         data = IZoneData(system=system, zones=zones)
         self._settle(data)
+        self._start_loop()  # e.g. a zone's sensor came back
         return data
 
     # Desired state -------------------------------------------------------
@@ -123,10 +132,7 @@ class IZoneCoordinator(DataUpdateCoordinator[IZoneData]):
         )
         self._requests.append(request)
         self.async_update_listeners()
-        if self._loop_task is None or self._loop_task.done():
-            self._loop_task = self.config_entry.async_create_background_task(
-                self.hass, self._reconcile(), f"{c.DOMAIN} reconcile {self.uid}"
-            )
+        self._start_loop()
         await request.done
 
     def system_view(self) -> dict[str, Any]:
@@ -142,13 +148,17 @@ class IZoneCoordinator(DataUpdateCoordinator[IZoneData]):
         return {**raw, **overlay} if overlay else raw
 
     def status(self, match: Callable[[PendingKey], bool]) -> str:
-        """Progress of the open requests touching the fields `match` selects."""
+        """Progress of the changes touching the fields `match` selects: those
+        of open requests, plus any still being applied (e.g. after a sensor
+        came back)."""
         keys = {
             key for r in self._requests if not r.done.done() for key in r.keys
             if match(key)
-        }
+        } | {k for k, w in self._wants.items() if match(k) and not w.waiting_for_sensor}
         if not keys:
             now = time.monotonic()
+            if any(match(k) and w.waiting_for_sensor for k, w in self._wants.items()):
+                return c.STATUS_WAITING_SENSOR
             failed = any(match(k) and now < t for k, t in self._failed.items())
             return c.STATUS_FAILED if failed else c.STATUS_READY
         open_keys = [k for k in keys if k in self._wants]
@@ -163,15 +173,26 @@ class IZoneCoordinator(DataUpdateCoordinator[IZoneData]):
 
     # The reconcile loop --------------------------------------------------
 
+    def _has_work(self) -> bool:
+        """Changes to send or confirm. One waiting for a sensor isn't work:
+        the regular poll watches for the sensor and restarts the loop."""
+        return any(not w.waiting_for_sensor for w in self._wants.values())
+
+    def _start_loop(self) -> None:
+        if self._has_work() and (self._loop_task is None or self._loop_task.done()):
+            self._loop_task = self.config_entry.async_create_background_task(
+                self.hass, self._reconcile(), f"{c.DOMAIN} reconcile {self.uid}"
+            )
+
     async def _reconcile(self) -> None:
         try:
-            while self._wants:
+            while self._has_work():
                 try:
                     await self._sync()
                 except IZoneError as err:
                     _LOGGER.debug("Sync failed, will retry: %s", err)
                     self._settle(None)  # still let deadlines expire
-                if not self._wants:
+                if not self._has_work():
                     break
                 step = self._next_step()
                 wait = self.client.command_ready_in()
@@ -213,7 +234,19 @@ class IZoneCoordinator(DataUpdateCoordinator[IZoneData]):
             actual = self._raw(data, key)
             if actual == want.value:
                 del self._wants[key]
-            elif now > want.deadline:
+                continue
+            if self._sensor_wait(data, key, want, now):
+                continue
+            seen, want.last_seen = want.last_seen, actual
+            if seen is not _UNSEEN and actual != seen:
+                del self._wants[key]
+                _LOGGER.info(
+                    "%s was changed elsewhere to %r while %r was being applied; "
+                    "keeping the newer change",
+                    self._describe(key), actual, want.value,
+                )
+                continue
+            if now > want.deadline:
                 self._fail(key, "no response from the bridge")
             elif (
                 want.attempts >= c.MAX_ATTEMPTS
@@ -228,8 +261,9 @@ class IZoneCoordinator(DataUpdateCoordinator[IZoneData]):
         if off and off.value == 0 and off.unless_zones_on and not off.sent_at:
             if any(c.zone_is_on(self._view(i, z)) for i, z in data.zones.items()):
                 del self._wants[(None, "SysOn")]
+        active = {k for k, w in self._wants.items() if not w.waiting_for_sensor}
         for request in self._requests:
-            if not request.done.done() and not request.keys & self._wants.keys():
+            if not request.done.done() and not request.keys & active:
                 if request.errors:
                     request.done.set_exception(
                         IZoneCommandError("; ".join(request.errors))
@@ -238,13 +272,45 @@ class IZoneCoordinator(DataUpdateCoordinator[IZoneData]):
                     request.done.set_result(None)
         self._requests = [r for r in self._requests if not r.done.done()]
 
+    def _sensor_wait(
+        self, data: IZoneData, key: PendingKey, want: _Want, now: float
+    ) -> bool:
+        """Hold a change that needs a zone's sensor while the sensor is out.
+
+        Returns True while it's held: nothing is sent, and it isn't judged,
+        because the controller reports the zone as closed until it recovers.
+        """
+        index, name = key
+        zone = data.zones.get(index) if index is not None else None
+        needs_sensor = name == "Setpoint" or (
+            name == "Mode" and want.value in (c.ZONE_MODE_AUTO, c.ZONE_MODE_OVERRIDE)
+        )
+        if zone is not None and needs_sensor and c.sensor_faulted(zone):
+            if not want.waiting_for_sensor:
+                _LOGGER.warning(
+                    "%s: the zone's sensor isn't responding; %s=%r will be applied "
+                    "when it's back",
+                    self._describe(key), name, want.value,
+                )
+                want.waiting_for_sensor = True
+                want.deadline = max(want.deadline, now + c.SENSOR_WAIT)
+            want.last_seen, want.sent_at, want.attempts = _UNSEEN, None, 0
+            return True
+        if want.waiting_for_sensor:
+            _LOGGER.info("%s: the zone's sensor is back", self._describe(key))
+            want.waiting_for_sensor = False
+            want.deadline = now + c.PENDING_TIMEOUT
+        return False
+
+    def _describe(self, key: PendingKey) -> str:
+        index, _ = key
+        if index is None:
+            return "AC"
+        return self.data.zones.get(index, {}).get("Name") or f"Zone {index + 1}"
+
     def _fail(self, key: PendingKey, reason: str) -> None:
         want = self._wants.pop(key)
-        index, name = key
-        where = "AC" if index is None else self.data.zones.get(index, {}).get(
-            "Name", f"zone {index + 1}"
-        )
-        message = f"{where} {name}={want.value}: {reason}"
+        message = f"{self._describe(key)} {key[1]}={want.value}: {reason}"
         _LOGGER.warning("Change not applied: %s", message)
         self._failed[key] = time.monotonic() + c.FAILED_SHOW
         for request in self._requests:
@@ -256,6 +322,8 @@ class IZoneCoordinator(DataUpdateCoordinator[IZoneData]):
         now = time.monotonic()
         ready = []
         for key, want in list(self._wants.items()):
+            if want.waiting_for_sensor:
+                continue
             due = want.sent_at is None or (
                 now - want.sent_at > c.RESEND_AFTER and want.attempts < c.MAX_ATTEMPTS
             )

@@ -17,6 +17,9 @@ RESEND_AFTER = 2.5  # re-send a command the bridge hasn't reported by then
 MAX_ATTEMPTS = 3  # sends per change before giving up
 PENDING_TIMEOUT = 30  # backstop: give up on any change after this long
 FAILED_SHOW = 10  # how long a failed change shows "failed"
+# A zone whose sensor has dropped out can't take Auto or a temperature until
+# the sensor is back; such a change waits this long for it.
+SENSOR_WAIT = 12 * 3600
 
 # Progress shown in each entity's "status" attribute, with its icon.
 STATUS_READY = "ready"
@@ -24,11 +27,14 @@ STATUS_QUEUED = "queued"
 STATUS_SENDING = "sending"  # shown as "sending (1 of 2)"
 STATUS_CONFIRMING = "confirming"
 STATUS_FAILED = "failed"
+STATUS_WAITING_SENSOR = "waiting for sensor"
+# Keyed by the status's first word ("sending (1 of 2)" -> "sending").
 STATUS_ICONS = {
-    STATUS_QUEUED: "mdi:timer-sand",
-    STATUS_SENDING: "mdi:sync",
-    STATUS_CONFIRMING: "mdi:sync",
-    STATUS_FAILED: "mdi:alert-circle-outline",
+    "queued": "mdi:timer-sand",
+    "sending": "mdi:sync",
+    "confirming": "mdi:sync",
+    "failed": "mdi:alert-circle-outline",
+    "waiting": "mdi:thermometer-off",
 }
 
 # SysMode_e
@@ -64,13 +70,27 @@ ZONE_TYPE_AUTO = 3
 ZONE_MODES_ON = (ZONE_MODE_OPEN, ZONE_MODE_AUTO, ZONE_MODE_OVERRIDE)
 
 
-def zone_is_on(zone: dict) -> bool:
-    return not zone.get("Bypass") and zone.get("Mode") in ZONE_MODES_ON
-
-
 # SensType for a zone with no temperature sensor (e.g. a bypass/constant zone).
 # Such zones report SensorFault: 1 and Temp: 0, so skip their sensor entities.
 SENS_TYPE_NONE = 255
+
+
+def sensor_faulted(zone: dict) -> bool:
+    """A zone whose sensor has dropped out (not one that has no sensor).
+
+    The controller reports such a zone as closed, and resumes the mode and
+    setpoint it remembers once the sensor is back.
+    """
+    return bool(zone.get("SensorFault")) and zone.get("SensType") != SENS_TYPE_NONE
+
+
+def zone_is_on(zone: dict) -> bool:
+    """Whether a zone keeps the AC running (a faulted zone is closed for now)."""
+    return (
+        not zone.get("Bypass")
+        and zone.get("Mode") in ZONE_MODES_ON
+        and not sensor_faulted(zone)
+    )
 
 # CtrlZone value meaning "the unit's own setpoint is in control"
 CTRL_ZONE_UNIT = 15

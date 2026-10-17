@@ -229,8 +229,10 @@ class IZoneZoneClimate(IZoneZoneEntity, ClimateEntity):
     @property
     def current_temperature(self) -> float | None:
         temp = self.zone.get("Temp")
-        # Zones without a sensor report 0.
-        return from_centi(temp) if temp else None
+        # Zones without a sensor report 0; a dropped-out sensor's value is stale.
+        if not temp or c.sensor_faulted(self.zone):
+            return None
+        return from_centi(temp)
 
     @property
     def target_temperature(self) -> float | None:
