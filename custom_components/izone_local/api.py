@@ -45,6 +45,9 @@ QUERY_SYSTEM = 1
 QUERY_ZONE = 2
 QUERY_SCHEDULE = 3
 
+# Favourites (saved AC + zone setups, "schedules" in the API) on the controller.
+FAVOURITE_COUNT = 9
+
 
 class IZoneError(Exception):
     """Base error for the iZone client."""
@@ -255,6 +258,22 @@ class IZoneClient:
                 return value
         raise IZoneConnectionError(f"No zone datagram in reply: {data}")
 
+    async def get_favourite(self, index: int) -> dict[str, Any]:
+        """One saved favourite (0-8): Name, Mode, Fan and 14 Zones."""
+        data = await self.query(QUERY_SCHEDULE, index)
+        favourite = data.get("SchedulesV2")
+        if not isinstance(favourite, dict):
+            raise IZoneConnectionError(f"No favourite in reply: {data}")
+        return favourite
+
+    async def run_favourite(self, index: int) -> None:
+        """Apply a saved favourite (0-8) in one command ("FavouriteSet" 1-9).
+
+        Measured: the controller turns the AC on within ~1 s and sets zones
+        over the next ~5 s, but can leave a zone unchanged for a minute.
+        """
+        await self.command("FavouriteSet", index + 1)
+
     def command_ready_in(self) -> float:
         """Seconds until the next command may be sent (0 if now)."""
         return max(0.0, self._last_command + COMMAND_GAP - time.monotonic())
@@ -321,6 +340,11 @@ class IZoneClient:
 
     async def set_zone_min_air(self, index: int, percent: int) -> None:
         await self.command("ZoneMinAir", {"Index": index, "MinAir": percent})
+
+
+def clean_name(value: Any) -> str:
+    """A name without the firmware's padding (NUL and 0xFF bytes)."""
+    return str(value or "").split("\x00", 1)[0].strip("\ufffd\xff \t\r\n")
 
 
 def to_centi(celsius: float) -> int:

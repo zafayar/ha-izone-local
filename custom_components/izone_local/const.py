@@ -20,6 +20,10 @@ FAILED_SHOW = 10  # how long a failed change shows "failed"
 # A zone whose sensor has dropped out can't take Auto or a temperature until
 # the sensor is back; such a change waits this long for it.
 SENSOR_WAIT = 12 * 3600
+# After running a favourite the controller can take ~35 s to set the zones,
+# and ignores separate zone commands meanwhile (measured). Follow-ups for a
+# favourite wait this long.
+FAVOURITE_SETTLE = 60
 
 # Progress shown in each entity's "status" attribute, with its icon.
 STATUS_READY = "ready"

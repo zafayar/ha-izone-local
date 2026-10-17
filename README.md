@@ -17,6 +17,7 @@ It does not use the cloud.
 | Sensors | Supply air temperature, return air temperature, AC error code; zone temperature and damper position. |
 | Binary sensors | Filter warning, AC fault; zone sensor fault and damper fault. |
 | Switch | iSave (only if the system has iSave enabled). |
+| Scenes | One per favourite saved on the controller (see below). |
 
 ### The AC follows the zones
 
@@ -102,6 +103,25 @@ state_content:
   - status
 ```
 
+### Favourites
+
+Each favourite saved in the iZone app (AC mode, fan and per-zone settings)
+is a scene, named after the favourite. Slots still called "Favourite 1" to
+"Favourite 9" are added but disabled; enable them if you use them. A scene's
+attributes show what it does, for example `zones: {Master: auto 22.0,
+Living: close}`. Favourites are read when the integration starts, so reload
+it after renaming or adding one in the app.
+
+Activating a scene sends one `FavouriteSet` command, and returns once the
+controller accepts it. The controller turns the AC on within a second or two,
+but can take up to a minute to set every zone, and ignores separate zone
+commands meanwhile. So the integration watches, and after 60 s sends zone by
+zone whatever is still missing. The entities show the progress meanwhile.
+
+If the favourite needs a zone whose sensor is out, the controller refuses the
+whole favourite. The integration then applies it zone by zone instead, and
+that zone waits for its sensor.
+
 ### Names
 
 Names come from the system itself:
@@ -148,9 +168,9 @@ recognises the bridge by its ID and updates the existing entry.
 
 ## Not yet supported
 
-Schedules (`Type 3`), zone min/max airflow (the client methods exist, but there
-are no entities for them), sleep timer, split and VRF systems, iLight, iDrate
-and iPower.
+Schedules (timed favourites), editing favourites, zone min/max airflow (the
+client methods exist, but there are no entities for them), sleep timer, split
+and VRF systems, iLight, iDrate and iPower.
 
 ## Testing status
 

@@ -5,7 +5,7 @@ from __future__ import annotations
 import asyncio
 import logging
 import time
-from collections.abc import Awaitable, Callable
+from collections.abc import Awaitable, Callable, Coroutine
 from dataclasses import dataclass, field
 from typing import Any
 
@@ -50,6 +50,13 @@ class _Want:
     last_seen: Any = _UNSEEN
     # The zone's sensor has dropped out; nothing is sent until it's back.
     waiting_for_sensor: bool = False
+    # How long to give a send before re-sending (None: RESEND_AFTER).
+    resend_after: float | None = None
+
+    def due_again(self, now: float) -> bool:
+        """Sent, but long enough ago that it should have shown by now."""
+        wait = c.RESEND_AFTER if self.resend_after is None else self.resend_after
+        return self.sent_at is not None and now - self.sent_at > wait
 
 
 @dataclass
@@ -111,12 +118,22 @@ class IZoneCoordinator(DataUpdateCoordinator[IZoneData]):
     # Desired state -------------------------------------------------------
 
     async def async_request(
-        self, changes: dict[PendingKey, Any], *, ac_off_unless_zones_on: bool = False
+        self,
+        changes: dict[PendingKey, Any],
+        *,
+        ac_off_unless_zones_on: bool = False,
+        prelude: Callable[[], Coroutine[Any, Any, None]] | None = None,
+        wait: bool = True,
     ) -> None:
         """Show `changes` now, then wait until the bridge shows them too.
 
         With `ac_off_unless_zones_on`, a request to turn the AC off is dropped
         (without error) if a zone turns out to be on when the bridge is read.
+        `prelude` is one command that should produce all the changes (e.g.
+        running a favourite); they then count as sent once, and only what's
+        still missing after FAVOURITE_SETTLE is sent one by one.
+        With `wait` False this returns once the prelude is accepted, and the
+        rest carries on in the background (problems are logged).
         Raises IZoneCommandError if any change could not be applied.
         """
         if not changes:
@@ -132,8 +149,64 @@ class IZoneCoordinator(DataUpdateCoordinator[IZoneData]):
         )
         self._requests.append(request)
         self.async_update_listeners()
+        if prelude is not None:
+            await self._send_prelude(prelude, changes)
         self._start_loop()
-        await request.done
+        if wait:
+            await request.done
+        else:
+            # Errors were logged by _fail; mark the result as seen.
+            request.done.add_done_callback(lambda f: f.cancelled() or f.exception())
+
+    async def _send_prelude(
+        self,
+        prelude: Callable[[], Coroutine[Any, Any, None]],
+        changes: dict[PendingKey, Any],
+    ) -> None:
+        wants = [self._wants[k] for k in changes if k in self._wants]
+        now = time.monotonic()
+        for want in wants:
+            want.sent_at, want.attempts = now, 1
+            want.resend_after = c.FAVOURITE_SETTLE
+            settle = now + c.FAVOURITE_SETTLE + c.PENDING_TIMEOUT
+            want.deadline = max(want.deadline, settle)
+        self.async_update_listeners()
+        try:
+            await prelude()
+        except IZoneError as err:
+            _LOGGER.info("%s; applying the changes one by one instead", err)
+            for want in wants:
+                want.sent_at, want.attempts, want.resend_after = None, 0, None
+
+    def favourite_changes(
+        self, favourite: dict[str, Any]
+    ) -> tuple[dict[PendingKey, Any], bool]:
+        """The state a favourite produces, and whether the controller can
+        apply it as a whole: it refuses a favourite that needs a zone whose
+        sensor is out, so that one has to be applied zone by zone."""
+        changes: dict[PendingKey, Any] = {}
+        if favourite.get("Mode") in range(c.MODE_COOL, c.MODE_AUTO + 1):
+            changes[(None, "SysMode")] = favourite["Mode"]
+        if favourite.get("Fan") in range(c.FAN_LOW, c.FAN_TOP + 1):
+            changes[(None, "SysFan")] = favourite["Fan"]
+        targets = favourite.get("Zones") or []
+        whole, any_on = True, False
+        for index, zone in self.data.zones.items():
+            if index >= len(targets) or zone.get("Bypass"):
+                continue
+            if zone.get("ZoneType") == c.ZONE_TYPE_CONSTANT:
+                continue  # the controller runs constant zones itself
+            mode = targets[index].get("Mode")
+            if mode not in (c.ZONE_MODE_OPEN, c.ZONE_MODE_CLOSE, c.ZONE_MODE_AUTO):
+                continue  # left alone by this favourite
+            changes[(index, "Mode")] = mode
+            any_on = any_on or mode != c.ZONE_MODE_CLOSE
+            if mode == c.ZONE_MODE_AUTO:
+                changes[(index, "Setpoint")] = targets[index].get("Setpoint")
+                whole = whole and not c.sensor_faulted(zone)
+        if any_on:
+            changes[(None, "SysOn")] = 1  # the controller turns the AC on
+        return changes, whole
 
     def system_view(self) -> dict[str, Any]:
         """The system datagram with the desired values applied."""
@@ -260,11 +333,7 @@ class IZoneCoordinator(DataUpdateCoordinator[IZoneData]):
                 continue
             if now > want.deadline:
                 self._fail(key, "no response from the bridge")
-            elif (
-                want.attempts >= c.MAX_ATTEMPTS
-                and want.sent_at
-                and now - want.sent_at > c.RESEND_AFTER
-            ):
+            elif want.attempts >= c.MAX_ATTEMPTS and want.due_again(now):
                 self._fail(key, "the bridge accepted it but didn't apply it")
         # The AC only goes off if no zone is on, judged on fresh data (and
         # changes still on their way): a zone opened from the wall controller
@@ -337,7 +406,7 @@ class IZoneCoordinator(DataUpdateCoordinator[IZoneData]):
             if want.waiting_for_sensor:
                 continue
             due = want.sent_at is None or (
-                now - want.sent_at > c.RESEND_AFTER and want.attempts < c.MAX_ATTEMPTS
+                want.due_again(now) and want.attempts < c.MAX_ATTEMPTS
             )
             if due and not self._blocked(key, want):
                 ready.append((self._order(key, want.value), key, want))
@@ -383,6 +452,7 @@ class IZoneCoordinator(DataUpdateCoordinator[IZoneData]):
     async def _send(self, key: PendingKey, want: _Want) -> None:
         want.sent_at = time.monotonic()
         want.attempts += 1
+        want.resend_after = None  # sent on its own now: normal timing
         self.async_update_listeners()
         try:
             await self._command(key, want.value)()
