@@ -17,6 +17,7 @@ from .const import (
     brand_name,
     system_name,
     unit_model,
+    zone_name,
 )
 from .coordinator import IZoneCoordinator, PendingKey
 
@@ -77,11 +78,13 @@ class IZoneZoneEntity(IZoneEntity):
     def __init__(self, coordinator: IZoneCoordinator, index: int, key: str) -> None:
         super().__init__(coordinator, f"zone{index}_{key}")
         self.index = index
+        name = zone_name(self.zone, index)
         self._attr_device_info = DeviceInfo(
             identifiers={(DOMAIN, f"{coordinator.uid}_zone{index}")},
             manufacturer=brand_name(coordinator.data.system),
             model=f"{brand_name(coordinator.data.system)} zone",
-            name=self.zone.get("Name") or f"Zone {index + 1}",
+            name=name,
+            suggested_area=name,  # a zone is usually a room
             via_device=(DOMAIN, coordinator.uid),
         )
 

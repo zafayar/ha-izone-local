@@ -504,9 +504,12 @@ class IZoneCoordinator(DataUpdateCoordinator[IZoneData]):
         client = self.client
         index, name = key
         if index is not None:
-            if name == "Mode":
-                return lambda: client.set_zone_mode(index, value)
-            return lambda: client.set_zone_setpoint(index, from_centi(value))
+            return {
+                "Mode": lambda: client.set_zone_mode(index, value),
+                "Setpoint": lambda: client.set_zone_setpoint(index, from_centi(value)),
+                "MinAir": lambda: client.set_zone_min_air(index, value),
+                "MaxAir": lambda: client.set_zone_max_air(index, value),
+            }[name]
         return {
             "SysOn": lambda: client.set_power(bool(value)),
             "SysMode": lambda: client.set_mode(value),

@@ -12,12 +12,23 @@ from homeassistant.components.sensor import (
     SensorEntityDescription,
     SensorStateClass,
 )
-from homeassistant.const import PERCENTAGE, EntityCategory, UnitOfTemperature
+from homeassistant.const import (
+    PERCENTAGE,
+    EntityCategory,
+    UnitOfTemperature,
+    UnitOfTime,
+)
 from homeassistant.core import HomeAssistant
 from homeassistant.helpers.entity_platform import AddConfigEntryEntitiesCallback
 
 from .api import from_centi
-from .const import SENS_TYPE_NONE
+from .const import (
+    CTRL_ZONE_UNIT,
+    SENS_TYPE_NONE,
+    SENS_TYPE_WIRELESS,
+    sensor_faulted,
+    zone_name,
+)
 from .coordinator import IZoneConfigEntry, IZoneCoordinator
 from .entity import IZoneEntity, IZoneZoneEntity
 
@@ -26,6 +37,11 @@ from .entity import IZoneEntity, IZoneZoneEntity
 class IZoneSensorDescription(SensorEntityDescription):
     value_fn: Callable[[dict[str, Any]], Any]
     needs_sensor: bool = False  # skip on zones with no temperature sensor
+    wireless_only: bool = False  # only zones with a battery-powered sensor
+
+
+BATTERY_LEVELS = {0: "full", 1: "half", 2: "empty"}  # BatteryLevel_e
+SIGNAL_LEVELS = {0: "full", 1: "half", 2: "quarter", 3: "none"}  # RfSignalLevel_e
 
 
 def _temp(key: str) -> Callable[[dict[str, Any]], float | None]:
@@ -55,6 +71,16 @@ SYSTEM_SENSORS = (
         entity_category=EntityCategory.DIAGNOSTIC,
         value_fn=lambda d: (d.get("ACError") or "").strip() or None,
     ),
+    IZoneSensorDescription(
+        key="run_hours",
+        translation_key="run_hours",
+        device_class=SensorDeviceClass.DURATION,
+        state_class=SensorStateClass.TOTAL_INCREASING,
+        native_unit_of_measurement=UnitOfTime.HOURS,
+        entity_category=EntityCategory.DIAGNOSTIC,
+        # Not in the published spec, but reported by the controller.
+        value_fn=lambda d: d.get("AcRunH"),
+    ),
 )
 
 ZONE_SENSORS = (
@@ -70,8 +96,28 @@ ZONE_SENSORS = (
         key="damper_position",
         translation_key="damper_position",
         state_class=SensorStateClass.MEASUREMENT,
+        entity_category=EntityCategory.DIAGNOSTIC,
         native_unit_of_measurement=PERCENTAGE,
         value_fn=lambda d: d.get("DmpPos"),
+    ),
+    IZoneSensorDescription(
+        key="sensor_battery",
+        translation_key="sensor_battery",
+        device_class=SensorDeviceClass.ENUM,
+        options=list(BATTERY_LEVELS.values()),
+        entity_category=EntityCategory.DIAGNOSTIC,
+        value_fn=lambda d: BATTERY_LEVELS.get(d.get("BattVolt")),
+        wireless_only=True,
+    ),
+    IZoneSensorDescription(
+        key="sensor_signal",
+        translation_key="sensor_signal",
+        device_class=SensorDeviceClass.ENUM,
+        options=list(SIGNAL_LEVELS.values()),
+        entity_category=EntityCategory.DIAGNOSTIC,
+        # A weakening signal is the early warning before a sensor drops out.
+        value_fn=lambda d: SIGNAL_LEVELS.get(d.get("RfSignal")),
+        wireless_only=True,
     ),
 )
 
@@ -85,12 +131,15 @@ async def async_setup_entry(
     entities: list[SensorEntity] = [
         IZoneSystemSensor(coordinator, desc) for desc in SYSTEM_SENSORS
     ]
+    entities.append(IZoneControlZoneSensor(coordinator))
     for index, zone in coordinator.data.zones.items():
         has_sensor = zone.get("SensType") != SENS_TYPE_NONE
+        wireless = zone.get("SensType") == SENS_TYPE_WIRELESS
         entities.extend(
             IZoneZoneSensor(coordinator, index, desc)
             for desc in ZONE_SENSORS
-            if has_sensor or not desc.needs_sensor
+            if (has_sensor or not desc.needs_sensor)
+            and (wireless or not desc.wireless_only)
         )
     async_add_entities(entities)
 
@@ -109,6 +158,27 @@ class IZoneSystemSensor(IZoneEntity, SensorEntity):
         return self.entity_description.value_fn(self.system)
 
 
+class IZoneControlZoneSensor(IZoneEntity, SensorEntity):
+    """The zone whose sensor the unit is running from, or "unit".
+
+    The controller moves it between zones as each nears its setpoint.
+    """
+
+    _attr_translation_key = "control_zone"
+    _attr_entity_category = EntityCategory.DIAGNOSTIC
+
+    def __init__(self, coordinator: IZoneCoordinator) -> None:
+        super().__init__(coordinator, "control_zone")
+
+    @property
+    def native_value(self) -> str | None:
+        index = self.system.get("CtrlZone")
+        if index == CTRL_ZONE_UNIT:
+            return "unit"
+        zone = self.coordinator.data.zones.get(index)
+        return zone_name(zone, index) if zone is not None else None
+
+
 class IZoneZoneSensor(IZoneZoneEntity, SensorEntity):
     entity_description: IZoneSensorDescription
 
@@ -123,4 +193,6 @@ class IZoneZoneSensor(IZoneZoneEntity, SensorEntity):
 
     @property
     def native_value(self) -> Any:
+        if self.entity_description.needs_sensor and sensor_faulted(self.zone):
+            return None  # a dropped-out sensor's last value is stale
         return self.entity_description.value_fn(self.zone)

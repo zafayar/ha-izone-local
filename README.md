@@ -13,11 +13,12 @@ It does not use the cloud.
 | Entity | Notes |
 | --- | --- |
 | AC climate | Off / Cool / Heat / Fan only / Dry / Heat-Cool (iZone "Auto"); fan low, medium, high, auto, top. When a control zone is set (`CtrlZone`), the target and current temperature come from that zone. |
-| Zone climate (one per zone, on its own device named after the zone) | Off = damper closed (or the AC is off), Fan only = open, Auto = temperature-controlled (only on zones of type Auto). Setting a temperature on a closed or open zone switches it to Auto. Zones also switch the AC on and off; see below. Bypass zones get no climate entity, because the system controls them itself. |
-| Sensors | Supply air temperature, return air temperature, AC error code; zone temperature and damper position. |
+| Zone climate (one per zone, on its own device named after the zone, which suggests a room of the same name) | Off = damper closed (or the AC is off), Fan only = open, Auto = temperature-controlled (only on zones of type Auto). Setting a temperature on a closed or open zone switches it to Auto. Zones also switch the AC on and off; see below. Bypass zones get no climate entity, because the system controls them itself. |
+| Sensors | Supply air temperature, return air temperature, AC error code, AC run hours, control zone (the zone the unit is following, or `unit`); zone temperature and damper position, plus battery and signal strength for wireless zone sensors. |
 | Binary sensors | Filter warning, AC fault, bridge problem; zone sensor fault and damper fault. |
 | Switch | iSave (only if the system has iSave enabled). |
 | Scenes | One per favourite saved on the controller (see below). |
+| Numbers | Each zone's minimum and maximum airflow (settings, off by default). |
 
 ### The AC follows the zones
 
@@ -208,9 +209,12 @@ recognises the bridge by its ID and updates the existing entry.
 
 ## Not yet supported
 
-Schedules (timed favourites), editing favourites, zone min/max airflow (the
-client methods exist, but there are no entities for them), sleep timer, split
-and VRF systems, iLight, iDrate and iPower.
+Schedules (timed favourites), editing favourites, split and VRF systems,
+iLight, iDrate and iPower.
+
+The sleep timer is left out on purpose: on a real controller, setting it
+turns the AC on, and setting it back to 0 doesn't cancel it (only turning the
+AC off does, about 10 s later), so it doesn't work as a setting.
 
 ## Testing status
 

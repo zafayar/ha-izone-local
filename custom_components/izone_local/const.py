@@ -2,6 +2,8 @@
 
 from datetime import timedelta
 
+from .api import clean_name
+
 DOMAIN = "izone_local"
 MANUFACTURER = "iZone"
 
@@ -84,6 +86,11 @@ ZONE_MODES_ON = (ZONE_MODE_OPEN, ZONE_MODE_AUTO, ZONE_MODE_OVERRIDE)
 # SensType for a zone with no temperature sensor (e.g. a bypass/constant zone).
 # Such zones report SensorFault: 1 and Temp: 0, so skip their sensor entities.
 SENS_TYPE_NONE = 255
+SENS_TYPE_WIRELESS = 3  # RoomSensorCRFS: battery powered, has signal strength
+
+
+def zone_name(zone: dict, index: int) -> str:
+    return clean_name(zone.get("Name")) or f"Zone {index + 1}"
 
 
 def sensor_faulted(zone: dict) -> bool:
@@ -164,8 +171,7 @@ def brand_name(system: dict) -> str:
 
 def system_name(system: dict) -> str:
     """The name shown on the wall controller (Tag1), or the brand."""
-    tag = str(system.get("Tag1") or "").strip()
-    return tag or brand_name(system)
+    return clean_name(system.get("Tag1")) or brand_name(system)
 
 
 def unit_model(system: dict) -> str:

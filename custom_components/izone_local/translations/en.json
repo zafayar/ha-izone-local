@@ -31,7 +31,21 @@
       "supply_temperature": { "name": "Supply air temperature" },
       "return_temperature": { "name": "Return air temperature" },
       "ac_error_code": { "name": "AC error code" },
-      "damper_position": { "name": "Damper position" }
+      "damper_position": { "name": "Damper position" },
+      "run_hours": { "name": "Run hours" },
+      "control_zone": { "name": "Control zone" },
+      "sensor_battery": {
+        "name": "Sensor battery",
+        "state": { "full": "Full", "half": "Half", "empty": "Empty" }
+      },
+      "sensor_signal": {
+        "name": "Sensor signal",
+        "state": { "full": "Full", "half": "Half", "quarter": "Quarter", "none": "None" }
+      }
+    },
+    "number": {
+      "min_airflow": { "name": "Minimum airflow" },
+      "max_airflow": { "name": "Maximum airflow" }
     },
     "switch": {
       "isave": { "name": "iSave" }
