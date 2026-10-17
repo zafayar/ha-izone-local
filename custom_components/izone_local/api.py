@@ -31,18 +31,13 @@ REQUEST_TIMEOUT = 10
 # Back-off (seconds) after each "{BUSY}" reply; the last attempt's reply is final.
 BUSY_RETRY_DELAYS = (0.5, 1, 2, 3, 0)
 # Minimum spacing between commands. Measured: 0.5 s after a zone mode change
-# a setpoint gets "{OK}" but is dropped; 1 s works. 1.5 s leaves a margin.
-COMMAND_GAP = 1.5
-# How long to wait before reading a zone back to confirm a setpoint.
-SETPOINT_VERIFY_DELAY = 1.0
+# a setpoint gets "{OK}" but is dropped; 1 s works. The coordinator re-sends
+# anything the bridge doesn't report, so no extra margin is needed.
+COMMAND_GAP = 1.0
 
 QUERY_SYSTEM = 1
 QUERY_ZONE = 2
 QUERY_SCHEDULE = 3
-
-# ZoneMode_e values used by the client itself (full list in const.py).
-ZONE_MODE_AUTO = 3
-ZONE_MODE_OVERRIDE = 4
 
 
 class IZoneError(Exception):
@@ -192,6 +187,10 @@ class IZoneClient:
                 return value
         raise IZoneConnectionError(f"No zone datagram in reply: {data}")
 
+    def command_ready_in(self) -> float:
+        """Seconds until the next command may be sent (0 if now)."""
+        return max(0.0, self._last_command + COMMAND_GAP - time.monotonic())
+
     async def command(self, name: str, value: Any) -> None:
         """Send one command. The bridge replies "{OK}", or "{BUSY}" while it is
         still processing a previous command, in which case we back off and retry.
@@ -243,29 +242,11 @@ class IZoneClient:
 
     async def set_zone_setpoint(self, index: int, celsius: float) -> None:
         # Only takes effect while the zone is in Auto; on a closed/open zone the
-        # bridge switches it to Auto and drops the value. Callers that don't
-        # know the mode should use ensure_zone_setpoint.
+        # bridge switches it to Auto and drops the value. The coordinator
+        # switches the zone to Auto first and re-sends if the value is dropped.
         await self.command(
             "ZoneSetpoint", {"Index": index, "Setpoint": to_centi(celsius)}
         )
-
-    async def ensure_zone_setpoint(
-        self, index: int, celsius: float, current_mode: int | None
-    ) -> None:
-        """Set a zone's temperature, switching it to Auto first if needed.
-
-        The bridge can answer "{OK}" and still drop a setpoint, so read the
-        zone back and retry once before reporting failure.
-        """
-        if current_mode not in (ZONE_MODE_AUTO, ZONE_MODE_OVERRIDE):
-            await self.set_zone_mode(index, ZONE_MODE_AUTO)
-        want = to_centi(celsius)
-        for _ in range(2):
-            await self.set_zone_setpoint(index, celsius)
-            await asyncio.sleep(SETPOINT_VERIFY_DELAY)
-            if (await self.get_zone(index)).get("Setpoint") == want:
-                return
-        raise IZoneCommandError(f"Zone {index} setpoint {want} was not applied")
 
     async def set_zone_max_air(self, index: int, percent: int) -> None:
         await self.command("ZoneMaxAir", {"Index": index, "MaxAir": percent})

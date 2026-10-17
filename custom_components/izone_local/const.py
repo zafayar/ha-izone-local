@@ -9,11 +9,27 @@ CONF_UID = "uid"
 
 SCAN_INTERVAL = timedelta(seconds=15)
 
-# How long a requested change is shown before the bridge's value wins.
-PENDING_TIMEOUT = 30
+# Requested changes are reconciled with the bridge in a loop: sync, compare,
+# send the next command, repeat. The bridge reports a change 0-2 s after
+# accepting it (measured: zone open 0.5 s, power on 1 s, zone close 1.9 s).
+CONFIRM_INTERVAL = 0.4  # how often to re-read while waiting
+RESEND_AFTER = 2.5  # re-send a command the bridge hasn't reported by then
+MAX_ATTEMPTS = 3  # sends per change before giving up
+PENDING_TIMEOUT = 30  # backstop: give up on any change after this long
+FAILED_SHOW = 10  # how long a failed change shows "failed"
 
-# Icon shown while a change is waiting for the bridge.
-PENDING_ICON = "mdi:timer-sand"
+# Progress shown in each entity's "status" attribute, with its icon.
+STATUS_READY = "ready"
+STATUS_QUEUED = "queued"
+STATUS_SENDING = "sending"  # shown as "sending (1 of 2)"
+STATUS_CONFIRMING = "confirming"
+STATUS_FAILED = "failed"
+STATUS_ICONS = {
+    STATUS_QUEUED: "mdi:timer-sand",
+    STATUS_SENDING: "mdi:sync",
+    STATUS_CONFIRMING: "mdi:sync",
+    STATUS_FAILED: "mdi:alert-circle-outline",
+}
 
 # SysMode_e
 MODE_COOL = 1
@@ -42,6 +58,15 @@ ZONE_MODE_CONSTANT = 5
 ZONE_TYPE_OPEN_CLOSE = 1
 ZONE_TYPE_CONSTANT = 2
 ZONE_TYPE_AUTO = 3
+
+# Zone modes a user has switched on. Constant zones are left out: the system
+# opens them itself whenever the unit runs, so they don't keep the unit on.
+ZONE_MODES_ON = (ZONE_MODE_OPEN, ZONE_MODE_AUTO, ZONE_MODE_OVERRIDE)
+
+
+def zone_is_on(zone: dict) -> bool:
+    return not zone.get("Bypass") and zone.get("Mode") in ZONE_MODES_ON
+
 
 # SensType for a zone with no temperature sensor (e.g. a bypass/constant zone).
 # Such zones report SensorFault: 1 and Temp: 0, so skip their sensor entities.

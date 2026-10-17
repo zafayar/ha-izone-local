@@ -39,23 +39,54 @@ as "on". Changes made outside Home Assistant (the iZone app, the wall
 controller) are not overridden: turning the AC on there with every zone closed
 leaves it on.
 
-### Instant feedback
+### How changes are applied
 
-The bridge needs commands about 1.5 s apart, so an action such as turning on a
-zone while the AC is off takes a few seconds. So that the UI doesn't sit still
-meanwhile:
+Every action states the result you want (for example "Master in Auto, the AC
+on"), and one loop makes the bridge match it:
 
-- **The change shows straight away.** Pressing a button updates the entities
-  at once (for example the zone to Auto and the AC to on), before any command
-  is sent.
-- **An hourglass icon (`mdi:timer-sand`) and a `pending: true` attribute**
-  show on every entity whose state is waiting for the bridge to confirm. A
-  change to the AC's power affects every zone, so it marks them all.
-- **The bridge's state wins.** The hourglass clears once a re-read shows the
-  change, usually 1–2 s after the last command. If a command fails, the entity
-  goes back to the bridge's state at once and Home Assistant shows the error.
-  If the bridge accepts a command but never reports the change, the entity goes
-  back after 30 s.
+1. **Show it.** The entities change at once, before any command is sent.
+2. **Sync.** Read the system, plus the zones the change touches (every zone
+   when the AC might turn off). That takes 15–60 ms.
+3. **Compare.** Drop anything the bridge already shows.
+4. **Send the next command**, in a safe order: zone closes and the AC mode
+   first, then zone modes, then setpoints (only once the zone shows Auto, as
+   the bridge drops them otherwise), then AC power. Commands are 1 s apart.
+5. **Repeat** every 0.4 s until the bridge shows everything. A command the
+   bridge accepts but doesn't apply is re-sent after 2.5 s, up to 3 times.
+
+The action finishes when the bridge shows the change, so automations that
+call it wait until the AC has actually responded. If it can't be applied, the
+entity goes back to the bridge's state and the action raises an error.
+
+Measured on a real bridge: turning on a zone while the AC is on is confirmed
+in about 0.7 s. Turning on a zone while the AC is off (one other zone to close
+first, then the AC on) takes about 3.7 s.
+
+### Status
+
+Every climate entity (and the iSave switch) has a `status` attribute and a
+matching icon:
+
+| Status | Icon | Meaning |
+| --- | --- | --- |
+| `ready` | normal | Nothing waiting. |
+| `queued` | `mdi:timer-sand` | Waiting for other commands to go first. |
+| `sending (1 of 2)` | `mdi:sync` | Commands for this change are going out. |
+| `confirming` | `mdi:sync` | Sent; waiting for the bridge to report it. |
+| `failed` | `mdi:alert-circle-outline` | The bridge didn't apply it (shown for 10 s). |
+
+A change to the AC's power changes every zone's state, so it shows on every
+zone. There's also a `pending: true` attribute while anything is unconfirmed.
+
+To show the status under the entity's name on a tile card:
+
+```yaml
+type: tile
+entity: climate.master
+state_content:
+  - state
+  - status
+```
 
 ### Names
 
@@ -90,10 +121,8 @@ recognises the bridge by its ID and updates the existing entry.
   `POST /iZoneRequestV2`. Requests are sent one at a time because the bridge is
   a small embedded device.
 - **Commands:** sent to `POST /iZoneCommandV2` (for example `{"SysOn": 1}` or
-  `{"ZoneMode": {"Index": 0, "Mode": 3}}`). The bridge replies `OK`. After
-  the last command of an action the integration re-reads the bridge once, and
-  again after 1, 2, 3, 5 and 8 s until the bridge reports the change (it takes
-  0–2 s to do so).
+  `{"ZoneMode": {"Index": 0, "Mode": 3}}`). The bridge replies `OK`, and
+  reports the change 0–2 s later. See "How changes are applied" above.
 - **Temperatures:** the API sends whole numbers in hundredths of a degree
   (2350 = 23.5 °C). Setpoints are limited to 15–30 °C in 0.5° steps.
 
@@ -130,8 +159,8 @@ sleep timer, zone mode and zone setpoint. More findings:
   temperature. The integration therefore switches the zone to Auto first.
 - Back-to-back commands are unreliable. Right after a zone mode change, the
   bridge replies `{BUSY}`. About 0.5 s later it replies `{OK}` but still drops
-  the command. From 1 s on, commands work. Commands are therefore sent at least
-  1.5 s apart, and zone setpoints are read back to confirm they were applied.
+  the command. From 1 s on, commands work. Commands are therefore sent 1 s
+  apart, and every change is read back and re-sent if it was dropped.
 - Each zone was controlled through its own entity, and the other zones were
   confirmed unchanged.
 - While a zone is the control zone (`CtrlZone` 0–13), the unit's `Setpoint`

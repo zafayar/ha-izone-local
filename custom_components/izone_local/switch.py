@@ -8,7 +8,7 @@ from homeassistant.components.switch import SwitchEntity
 from homeassistant.core import HomeAssistant
 from homeassistant.helpers.entity_platform import AddConfigEntryEntitiesCallback
 
-from .coordinator import IZoneConfigEntry, IZoneCoordinator
+from .coordinator import IZoneConfigEntry, IZoneCoordinator, PendingKey
 from .entity import IZoneEntity
 
 
@@ -33,12 +33,11 @@ class IZoneISaveSwitch(IZoneEntity, SwitchEntity):
         return bool(self.system.get("iSaveOn"))
 
     @property
-    def pending(self) -> bool:
-        return self.coordinator.is_pending(None, ("iSaveOn",))
-
-    @property
     def extra_state_attributes(self) -> dict[str, Any]:
-        return {"pending": self.pending}
+        return {"status": self.status, "pending": self.pending}
+
+    def _matches(self, key: PendingKey) -> bool:
+        return key == (None, "iSaveOn")
 
     async def async_turn_on(self, **kwargs: Any) -> None:
         await self._set(True)
@@ -47,7 +46,5 @@ class IZoneISaveSwitch(IZoneEntity, SwitchEntity):
         await self._set(False)
 
     async def _set(self, on: bool) -> None:
-        if self.is_on == on:
-            return
-        client = self.coordinator.client
-        await self._apply({(None, "iSaveOn"): int(on)}, lambda: client.set_isave(on))
+        if self.is_on != on:
+            await self._apply({(None, "iSaveOn"): int(on)})
