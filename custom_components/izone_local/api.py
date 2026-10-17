@@ -28,6 +28,8 @@ _LOGGER = logging.getLogger(__name__)
 DISCOVERY_PORT = 12107
 DISCOVERY_MESSAGE = b"IASD"
 REQUEST_TIMEOUT = 10
+# Waits before retrying a dropped request or server error (then it fails).
+CONNECT_RETRY_DELAYS = (0.5, 1.5)
 # Back-off (seconds) after each "{BUSY}" reply; the last attempt's reply is final.
 BUSY_RETRY_DELAYS = (0.5, 1, 2, 3, 0)
 # Minimum spacing between commands. Measured: 0.5 s after a zone mode change
@@ -138,20 +140,42 @@ class IZoneClient:
         self._last_command = 0.0
 
     async def _post(self, path: str, payload: dict[str, Any]) -> str:
+        """POST once, retrying a dropped request or a server error.
+
+        The bridge occasionally drops a request, especially while it's moving
+        dampers; a couple of quick retries keep one hiccup from making every
+        entity unavailable. Every command sets an absolute value, so a retry
+        can't apply anything twice.
+        """
         url = f"http://{self.host}/{path}"
         async with self._lock:
-            try:
-                async with (
-                    asyncio.timeout(REQUEST_TIMEOUT),
-                    self._session.post(url, json=payload) as resp,
-                ):
-                    status = resp.status
-                    # The bridge sends no Content-Type and some fields
-                    # (e.g. LockCode) contain raw 0xFF bytes, so
-                    # resp.text() would raise UnicodeDecodeError.
-                    text = (await resp.read()).decode("utf-8", errors="replace")
-            except (aiohttp.ClientError, TimeoutError) as err:
-                raise IZoneConnectionError(f"Error talking to {url}: {err}") from err
+            for attempt, delay in enumerate((*CONNECT_RETRY_DELAYS, None)):
+                try:
+                    return await self._post_once(url, payload)
+                except IZoneConnectionError as err:
+                    if delay is None:
+                        raise
+                    _LOGGER.debug(
+                        "%s failed (%s), retry %d in %ss", url, err, attempt + 1, delay
+                    )
+                    await asyncio.sleep(delay)
+        raise AssertionError("unreachable")
+
+    async def _post_once(self, url: str, payload: dict[str, Any]) -> str:
+        try:
+            async with (
+                asyncio.timeout(REQUEST_TIMEOUT),
+                self._session.post(url, json=payload) as resp,
+            ):
+                status = resp.status
+                # The bridge sends no Content-Type and some fields
+                # (e.g. LockCode) contain raw 0xFF bytes, so
+                # resp.text() would raise UnicodeDecodeError.
+                text = (await resp.read()).decode("utf-8", errors="replace")
+        except (aiohttp.ClientError, TimeoutError, OSError) as err:
+            # A timeout's message is empty; name the error instead.
+            reason = str(err) or type(err).__name__
+            raise IZoneConnectionError(f"Error talking to {url}: {reason}") from err
         if status != 200:
             raise IZoneConnectionError(f"{url} returned HTTP {status}: {text}")
         return text
@@ -232,7 +256,7 @@ class IZoneClient:
         await self.command("SysSetpoint", to_centi(celsius))
 
     async def set_isave(self, on: bool) -> None:
-        await self.command("iSave", 1 if on else 0)
+        await self.command("iSaveOn", 1 if on else 0)
 
     async def set_sleep_timer(self, minutes: int) -> None:
         await self.command("SysSleepTimer", minutes)
