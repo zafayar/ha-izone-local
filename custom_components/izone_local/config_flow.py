@@ -11,7 +11,13 @@ from homeassistant.config_entries import ConfigFlow, ConfigFlowResult
 from homeassistant.const import CONF_HOST
 from homeassistant.helpers.aiohttp_client import async_get_clientsession
 
-from .api import DiscoveredBridge, IZoneClient, IZoneError, async_discover
+from .api import (
+    DiscoveredBridge,
+    IZoneClient,
+    IZoneError,
+    async_discover,
+    clean_name,
+)
 from .const import CONF_UID, DOMAIN, brand_name
 
 _LOGGER = logging.getLogger(__name__)
@@ -93,7 +99,7 @@ class IZoneLocalConfigFlow(ConfigFlow, domain=DOMAIN):
         # If the bridge moved to a new DHCP address, update the existing entry.
         self._abort_if_unique_id_configured(updates={CONF_HOST: host})
         # e.g. "Rinnai Ghar", or "Rinnai 000012345" if the system has no Tag1.
-        tag = str(system.get("Tag1") or "").strip()
+        tag = clean_name(system.get("Tag1"))
         return self.async_create_entry(
             title=f"{brand_name(system)} {tag or uid}",
             data={CONF_HOST: host, CONF_UID: uid},
