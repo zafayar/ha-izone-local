@@ -6,10 +6,11 @@ import logging
 
 from homeassistant.const import CONF_HOST, Platform
 from homeassistant.core import HomeAssistant
+from homeassistant.helpers import device_registry as dr
 from homeassistant.helpers.aiohttp_client import async_get_clientsession
 
 from .api import IZoneClient, async_listen_for_changes
-from .const import CONF_UID
+from .const import CONF_UID, DOMAIN, brand_name, system_name, unit_model
 from .coordinator import IZoneConfigEntry, IZoneCoordinator
 
 _LOGGER = logging.getLogger(__name__)
@@ -39,8 +40,36 @@ async def async_setup_entry(hass: HomeAssistant, entry: IZoneConfigEntry) -> boo
     bridge_ip = entry.data[CONF_HOST].split(":")[0]
     if transport := await async_listen_for_changes(bridge_ip, changed):
         entry.async_on_unload(transport.close)
+
+    registry = dr.async_get(hass)
+    system = coordinator.data.system
+    ac = registry.async_get_or_create(
+        config_entry_id=entry.entry_id,
+        identifiers={(DOMAIN, coordinator.uid)},
+        manufacturer=brand_name(system),
+        model=unit_model(system),
+        name=system_name(system),
+    )
     await hass.config_entries.async_forward_entry_setups(entry, PLATFORMS)
+    _link_zone_devices(registry, coordinator, ac.id)
     return True
+
+
+def _link_zone_devices(
+    registry: dr.DeviceRegistry, coordinator: IZoneCoordinator, ac_id: str
+) -> None:
+    """Show each zone's device as connected through the AC's.
+
+    Done by registry device ID once the platforms have created the zone
+    devices: a `via_device` identifier in DeviceInfo is deprecated, and
+    `via_device_id` there isn't accepted by older Home Assistant versions.
+    """
+    for index in coordinator.data.zones:
+        zone = registry.async_get_device(
+            identifiers={(DOMAIN, f"{coordinator.uid}_zone{index}")}
+        )
+        if zone is not None and zone.via_device_id != ac_id:
+            registry.async_update_device(zone.id, via_device_id=ac_id)
 
 
 async def async_unload_entry(hass: HomeAssistant, entry: IZoneConfigEntry) -> bool:

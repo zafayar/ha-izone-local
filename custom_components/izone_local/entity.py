@@ -85,7 +85,7 @@ class IZoneZoneEntity(IZoneEntity):
             model=f"{brand_name(coordinator.data.system)} zone",
             name=name,
             suggested_area=name,  # a zone is usually a room
-            via_device=(DOMAIN, coordinator.uid),
+            # Linked to the AC device after setup (see __init__.py).
         )
 
     @property
