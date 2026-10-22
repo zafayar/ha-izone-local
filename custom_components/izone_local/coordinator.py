@@ -141,7 +141,11 @@ class IZoneCoordinator(DataUpdateCoordinator[IZoneData]):
             return self._keep_last_data(err)
         except IZoneError as err:
             self._failures.append(time.monotonic())
-            raise UpdateFailed(str(err)) from err
+            raise UpdateFailed(
+                translation_domain=c.DOMAIN,
+                translation_key="read_failed",
+                translation_placeholders={"error": str(err)},
+            ) from err
         data = IZoneData(system=system, zones=zones)
         self._settle(data)
         self._start_loop()  # e.g. a zone's sensor came back
@@ -237,8 +241,9 @@ class IZoneCoordinator(DataUpdateCoordinator[IZoneData]):
         if self.data is None or now - self._zeroed_since > c.ZEROED_GRACE:
             self._failures.append(now)
             raise UpdateFailed(
-                f"{err} for {round(now - self._zeroed_since)} s; the controller "
-                "may not be talking to the bridge"
+                translation_domain=c.DOMAIN,
+                translation_key="zeroed_data",
+                translation_placeholders={"seconds": str(round(now - self._zeroed_since))},
             ) from err
         return self.data
 

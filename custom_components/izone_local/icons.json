@@ -1,0 +1,64 @@
+{
+  "entity": {
+    "binary_sensor": {
+      "filter_warning": {
+        "default": "mdi:air-filter"
+      },
+      "bridge_problem": {
+        "default": "mdi:router-network"
+      }
+    },
+    "sensor": {
+      "control_zone": {
+        "default": "mdi:home-thermometer-outline"
+      },
+      "run_hours": {
+        "default": "mdi:timer-outline"
+      },
+      "ac_error_code": {
+        "default": "mdi:alert-circle-outline"
+      },
+      "damper_position": {
+        "default": "mdi:valve"
+      },
+      "firmware": {
+        "default": "mdi:chip"
+      },
+      "sensor_battery": {
+        "default": "mdi:battery",
+        "state": {
+          "full": "mdi:battery",
+          "half": "mdi:battery-50",
+          "empty": "mdi:battery-outline"
+        }
+      },
+      "sensor_signal": {
+        "default": "mdi:wifi",
+        "state": {
+          "full": "mdi:wifi-strength-4",
+          "half": "mdi:wifi-strength-2",
+          "quarter": "mdi:wifi-strength-1",
+          "none": "mdi:wifi-strength-off-outline"
+        }
+      }
+    },
+    "number": {
+      "min_airflow": {
+        "default": "mdi:fan-chevron-down"
+      },
+      "max_airflow": {
+        "default": "mdi:fan-chevron-up"
+      }
+    },
+    "switch": {
+      "isave": {
+        "default": "mdi:leaf"
+      }
+    }
+  },
+  "services": {
+    "update_favourite": {
+      "service": "mdi:star-cog-outline"
+    }
+  }
+}

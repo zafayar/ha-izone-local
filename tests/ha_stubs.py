@@ -192,11 +192,27 @@ class CoordinatorEntity[T](Entity):
         return self.coordinator.last_update_success
 
 
-class UpdateFailed(Exception):
-    pass
+def _messages():
+    import json
+    import pathlib
+    strings = pathlib.Path(__file__).parents[1] / "custom_components/izone_local/strings.json"
+    return json.loads(strings.read_text(encoding="utf-8"))["exceptions"]
 
 
 class HomeAssistantError(Exception):
+    """Renders a translated error from strings.json, as Home Assistant does."""
+
+    def __init__(self, *args, translation_domain=None, translation_key=None,
+                 translation_placeholders=None):
+        if translation_key is not None:
+            message = _messages()[translation_key]["message"]
+            args = (message.format(**(translation_placeholders or {})),)
+        super().__init__(*args)
+        self.translation_domain = translation_domain
+        self.translation_key = translation_key
+
+
+class UpdateFailed(HomeAssistantError):
     pass
 
 

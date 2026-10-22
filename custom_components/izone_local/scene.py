@@ -130,7 +130,11 @@ class IZoneFavouriteScene(IZoneEntity, Scene):
             # Read it fresh, in case it was changed in the iZone app.
             self._favourite = await client.get_favourite(self.index)
         except IZoneError as err:
-            raise HomeAssistantError(f"Can't read the favourite: {err}") from err
+            raise HomeAssistantError(
+                translation_domain=c.DOMAIN,
+                translation_key="favourite_read_failed",
+                translation_placeholders={"error": str(err)},
+            ) from err
         changes, whole = self.coordinator.favourite_changes(self._favourite)
         if not whole:
             _LOGGER.info(
@@ -163,17 +167,25 @@ class IZoneFavouriteScene(IZoneEntity, Scene):
         the favourite back, and what didn't stick is sent again.
         """
         if zone is None and (zone_mode is not None or temperature is not None):
-            raise ServiceValidationError("zone_mode and temperature need a zone")
+            raise ServiceValidationError(translation_domain=c.DOMAIN, translation_key="zone_settings_need_zone")
         if zone is not None and zone_mode is None and temperature is None:
-            raise ServiceValidationError(f"Give {zone} a zone_mode and/or temperature")
+            raise ServiceValidationError(
+                translation_domain=c.DOMAIN,
+                translation_key="zone_needs_setting",
+                translation_placeholders={"zone": zone},
+            )
         if zone is None and fan is None and mode is None:
-            raise ServiceValidationError("Nothing to change")
+            raise ServiceValidationError(translation_domain=c.DOMAIN, translation_key="nothing_to_change")
 
         client = self.coordinator.client
         try:
             current = await client.get_favourite(self.index)
         except IZoneError as err:
-            raise HomeAssistantError(f"Can't read the favourite: {err}") from err
+            raise HomeAssistantError(
+                translation_domain=c.DOMAIN,
+                translation_key="favourite_read_failed",
+                translation_placeholders={"error": str(err)},
+            ) from err
 
         edits: list[_Edit] = []
         if zone is not None:
@@ -190,8 +202,11 @@ class IZoneFavouriteScene(IZoneEntity, Scene):
             speeds = c.fan_speeds(self.coordinator.data.system)
             if fan_value and fan_value not in speeds:
                 raise ServiceValidationError(
-                    "This unit's fan speeds are "
-                    + ", ".join(FAN_NAMES[speed] for speed in speeds)
+                    translation_domain=c.DOMAIN,
+                    translation_key="fan_speeds",
+                    translation_placeholders={
+                        "speeds": ", ".join(FAN_NAMES[speed] for speed in speeds)
+                    },
                 )
             edits.append(
                 (
@@ -225,7 +240,9 @@ class IZoneFavouriteScene(IZoneEntity, Scene):
         name = clean_name(data.get("Name")) or zone
         if data.get("Bypass") or data.get("ZoneType") == c.ZONE_TYPE_CONSTANT:
             raise ServiceValidationError(
-                f"{name} is run by the system itself, so a favourite doesn't set it"
+                translation_domain=c.DOMAIN,
+                translation_key="zone_run_by_system",
+                translation_placeholders={"zone": name},
             )
         zones = []
         for slot in range(FAVOURITE_ZONE_SLOTS):
@@ -244,7 +261,9 @@ class IZoneFavouriteScene(IZoneEntity, Scene):
             new_mode = zones[index]["Mode"]
         if new_mode == c.ZONE_MODE_AUTO and data.get("ZoneType") != c.ZONE_TYPE_AUTO:
             raise ServiceValidationError(
-                f"{name} has no temperature control, so it can only be open or close"
+                translation_domain=c.DOMAIN,
+                translation_key="zone_open_close_only",
+                translation_placeholders={"zone": name},
             )
         zones[index] = {
             "Mode": new_mode,
@@ -264,7 +283,11 @@ class IZoneFavouriteScene(IZoneEntity, Scene):
         if wanted.isdigit() and int(wanted) - 1 in zones:
             return int(wanted) - 1
         names = ", ".join(c.zone_name(data, i) for i, data in zones.items())
-        raise ServiceValidationError(f"No zone '{zone}'; the zones are {names}")
+        raise ServiceValidationError(
+            translation_domain=c.DOMAIN,
+            translation_key="unknown_zone",
+            translation_placeholders={"zone": zone, "zones": names},
+        )
 
     async def _write(self, current: dict[str, Any], edits: list[_Edit]) -> None:
         client = self.coordinator.client
@@ -289,10 +312,13 @@ class IZoneFavouriteScene(IZoneEntity, Scene):
             pending = [edit for edit in pending if not edit[2](current)]
         self.async_write_ha_state()
         if pending:
-            detail = f" (last error: {last_error})" if last_error else ""
             raise HomeAssistantError(
-                f"Favourite {self._attr_name} didn't keep the change to "
-                + ", ".join(what for what, _send, _kept in pending)
-                + detail
+                translation_domain=c.DOMAIN,
+                translation_key="favourite_not_kept",
+                translation_placeholders={
+                    "favourite": self._attr_name or "",
+                    "changes": ", ".join(what for what, _send, _kept in pending),
+                    "error": str(last_error) if last_error else "none",
+                },
             )
         _LOGGER.info("Favourite %s updated: %s", self._attr_name, [e[0] for e in edits])

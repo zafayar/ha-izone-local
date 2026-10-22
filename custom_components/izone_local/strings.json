@@ -37,6 +37,35 @@
       }
     }
   },
+  "exceptions": {
+    "read_failed": { "message": "Can't read the iZone bridge: {error}" },
+    "zeroed_data": {
+      "message": "The bridge has answered with zeroed data for {seconds} s; the controller may not be talking to it"
+    },
+    "command_failed": { "message": "iZone command failed: {error}" },
+    "no_ac_mode": { "message": "The AC has no {mode} mode" },
+    "fan_speeds": { "message": "This unit's fan speeds are {speeds}" },
+    "zone_modes": {
+      "message": "A zone can only be {modes}; heat, cool and dry are set on the AC itself"
+    },
+    "airflow_range": {
+      "message": "Minimum airflow ({low}%) can't be above maximum ({high}%)"
+    },
+    "favourite_read_failed": { "message": "Can't read the favourite: {error}" },
+    "zone_settings_need_zone": { "message": "zone_mode and temperature need a zone" },
+    "zone_needs_setting": { "message": "Give {zone} a zone_mode and/or temperature" },
+    "nothing_to_change": { "message": "Nothing to change" },
+    "zone_run_by_system": {
+      "message": "{zone} is run by the system itself, so a favourite doesn't set it"
+    },
+    "zone_open_close_only": {
+      "message": "{zone} has no temperature control, so it can only be open or close"
+    },
+    "unknown_zone": { "message": "No zone '{zone}'; the zones are {zones}" },
+    "favourite_not_kept": {
+      "message": "Favourite {favourite} didn't keep the change to {changes} (last error: {error})"
+    }
+  },
   "services": {
     "update_favourite": {
       "name": "Update favourite",

@@ -69,7 +69,11 @@ class IZoneEntity(CoordinatorEntity[IZoneCoordinator]):
         try:
             await self.coordinator.async_request(changes, **options)
         except IZoneError as err:
-            raise HomeAssistantError(f"iZone command failed: {err}") from err
+            raise HomeAssistantError(
+                translation_domain=DOMAIN,
+                translation_key="command_failed",
+                translation_placeholders={"error": str(err)},
+            ) from err
 
 
 class IZoneZoneEntity(IZoneEntity):

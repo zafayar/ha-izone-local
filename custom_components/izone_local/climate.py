@@ -190,7 +190,11 @@ class IZoneSystemClimate(_TemperatureLimits, IZoneEntity, ClimateEntity):
         if hvac_mode == HVACMode.OFF:
             return self._power(False)
         if hvac_mode not in HVAC_TO_SYS_MODE:
-            raise ServiceValidationError(f"The AC has no '{hvac_mode}' mode")
+            raise ServiceValidationError(
+                translation_domain=c.DOMAIN,
+                translation_key="no_ac_mode",
+                translation_placeholders={"mode": hvac_mode},
+            )
         changes = self._power(True)
         if self.system.get("SysMode") != HVAC_TO_SYS_MODE[hvac_mode]:
             changes[(None, "SysMode")] = HVAC_TO_SYS_MODE[hvac_mode]
@@ -208,7 +212,9 @@ class IZoneSystemClimate(_TemperatureLimits, IZoneEntity, ClimateEntity):
     async def async_set_fan_mode(self, fan_mode: str) -> None:
         if fan_mode not in self.fan_modes:
             raise ServiceValidationError(
-                f"This unit's fan speeds are {', '.join(self.fan_modes)}"
+                translation_domain=c.DOMAIN,
+                translation_key="fan_speeds",
+                translation_placeholders={"speeds": ", ".join(self.fan_modes)},
             )
         fan = HA_TO_SYS_FAN[fan_mode]
         if self.system.get("SysFan") != fan:
@@ -307,8 +313,9 @@ class IZoneZoneClimate(_TemperatureLimits, IZoneZoneEntity, ClimateEntity):
     def _check_mode(self, hvac_mode: HVACMode) -> None:
         if hvac_mode not in self.hvac_modes:
             raise ServiceValidationError(
-                f"A zone can only be {', '.join(self.hvac_modes)}; heat, cool and "
-                "dry are set on the AC itself"
+                translation_domain=c.DOMAIN,
+                translation_key="zone_modes",
+                translation_placeholders={"modes": ", ".join(self.hvac_modes)},
             )
 
     async def async_set_hvac_mode(self, hvac_mode: HVACMode) -> None:

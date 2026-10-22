@@ -12,6 +12,7 @@ from homeassistant.core import HomeAssistant
 from homeassistant.exceptions import ServiceValidationError
 from homeassistant.helpers.entity_platform import AddConfigEntryEntitiesCallback
 
+from .const import DOMAIN
 from .coordinator import IZoneConfigEntry, IZoneCoordinator, PendingKey
 from .entity import IZoneZoneEntity
 
@@ -65,7 +66,9 @@ class IZoneAirflow(IZoneZoneEntity, NumberEntity):
         high = value if self._field == "MaxAir" else self.zone.get("MaxAir", 100)
         if low > high:
             raise ServiceValidationError(
-                f"Minimum airflow ({low}%) can't be above maximum ({high}%)"
+                translation_domain=DOMAIN,
+                translation_key="airflow_range",
+                translation_placeholders={"low": str(low), "high": str(high)},
             )
         if value != self.native_value:
             await self._apply({(self.index, self._field): value})

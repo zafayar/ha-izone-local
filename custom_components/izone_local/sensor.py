@@ -196,7 +196,6 @@ class IZoneFirmwareSensor(IZoneEntity, SensorEntity):
 
     _attr_translation_key = "firmware"
     _attr_entity_category = EntityCategory.DIAGNOSTIC
-    _attr_icon = "mdi:chip"
 
     def __init__(self, coordinator: IZoneCoordinator, module: str) -> None:
         label, key = firmware_label(module)
