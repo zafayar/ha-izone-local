@@ -1,6 +1,19 @@
 {
   "config": {
+    "flow_title": "{host}",
     "step": {
+      "discovery_confirm": {
+        "title": "iZone bridge found",
+        "description": "Set up the iZone bridge at {host}?"
+      },
+      "reconfigure": {
+        "title": "Change the bridge's address",
+        "description": "Enter the bridge's new IP address. It must be the same bridge.",
+        "data": { "host": "IP address" },
+        "data_description": {
+          "host": "The bridge's IP address on your network, e.g. 192.168.1.50."
+        }
+      },
       "pick": {
         "title": "Choose your iZone bridge",
         "data": { "bridge": "Bridge" },
@@ -22,6 +35,9 @@
     },
     "abort": {
       "already_configured": "This bridge is already set up.",
+      "already_in_progress": "This bridge is already being set up.",
+      "reconfigure_successful": "The bridge's address is updated.",
+      "wrong_bridge": "That's a different iZone bridge. Add it as a new entry instead.",
       "cannot_connect": "Could not reach the discovered bridge."
     }
   },

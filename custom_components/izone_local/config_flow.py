@@ -1,4 +1,8 @@
-"""Config flow: discover bridges on the LAN, or enter an IP address."""
+"""Config flow: discover bridges on the LAN, or enter an IP address.
+
+Also: confirming a bridge found by discovery (discovery.py), changing a
+bridge's address (reconfigure), and the options.
+"""
 
 from __future__ import annotations
 
@@ -15,6 +19,7 @@ from homeassistant.config_entries import (
 from homeassistant.const import CONF_HOST
 from homeassistant.core import callback
 from homeassistant.helpers.aiohttp_client import async_get_clientsession
+from homeassistant.helpers.typing import DiscoveryInfoType
 
 from .api import (
     DiscoveredBridge,
@@ -34,6 +39,7 @@ from .const import (
 _LOGGER = logging.getLogger(__name__)
 
 MANUAL = "manual"
+HOST_SCHEMA = vol.Schema({vol.Required(CONF_HOST): str})
 
 
 class IZoneLocalConfigFlow(ConfigFlow, domain=DOMAIN):
@@ -92,8 +98,57 @@ class IZoneLocalConfigFlow(ConfigFlow, domain=DOMAIN):
             if result is not None:
                 return result
         return self.async_show_form(
-            step_id="manual",
-            data_schema=vol.Schema({vol.Required(CONF_HOST): str}),
+            step_id="manual", data_schema=HOST_SCHEMA, errors=errors
+        )
+
+    async def async_step_integration_discovery(
+        self, discovery_info: DiscoveryInfoType
+    ) -> ConfigFlowResult:
+        """A bridge found on the network (see discovery.py)."""
+        host, uid = discovery_info[CONF_HOST], discovery_info[CONF_UID]
+        await self.async_set_unique_id(uid)
+        # Known bridge: keep its entry's address current (this reloads it).
+        self._abort_if_unique_id_configured(updates={CONF_HOST: host})
+        self._discovered = {uid: DiscoveredBridge(uid=uid, host=host)}
+        self.context["title_placeholders"] = {"host": host}
+        return await self.async_step_discovery_confirm()
+
+    async def async_step_discovery_confirm(
+        self, user_input: dict[str, Any] | None = None
+    ) -> ConfigFlowResult:
+        bridge = next(iter(self._discovered.values()))
+        if user_input is not None:
+            return await self._async_create(bridge.host)
+        self._set_confirm_only()
+        return self.async_show_form(
+            step_id="discovery_confirm", description_placeholders={"host": bridge.host}
+        )
+
+    async def async_step_reconfigure(
+        self, user_input: dict[str, Any] | None = None
+    ) -> ConfigFlowResult:
+        """Change the bridge's address; it must still be the same bridge."""
+        entry = self._get_reconfigure_entry()
+        errors: dict[str, str] = {}
+        if user_input is not None:
+            host = user_input[CONF_HOST]
+            client = IZoneClient(async_get_clientsession(self.hass), host)
+            try:
+                uid, _ = await client.get_system()
+            except IZoneError as err:
+                _LOGGER.debug("Cannot connect to %s: %s", host, err)
+                errors["base"] = "cannot_connect"
+            else:
+                await self.async_set_unique_id(uid or host)
+                self._abort_if_unique_id_mismatch(reason="wrong_bridge")
+                return self.async_update_reload_and_abort(
+                    entry, data_updates={CONF_HOST: host}
+                )
+        return self.async_show_form(
+            step_id="reconfigure",
+            data_schema=self.add_suggested_values_to_schema(
+                HOST_SCHEMA, user_input or {CONF_HOST: entry.data[CONF_HOST]}
+            ),
             errors=errors,
         )
 

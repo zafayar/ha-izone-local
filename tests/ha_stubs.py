@@ -221,8 +221,10 @@ class ServiceValidationError(HomeAssistantError):
 
 
 class ConfigEntry[T]:
-    def __init__(self, data):
+    def __init__(self, data, unique_id=None, entry_id="entry1"):
         self.data = data
+        self.unique_id = unique_id
+        self.entry_id = entry_id
         self.options = {}
         self.runtime_data = None
         self.update_listeners = []
@@ -235,6 +237,85 @@ class ConfigEntry[T]:
         import asyncio
         return asyncio.get_running_loop().create_task(coro, name=name)
 
+
+class AbortFlow(Exception):
+    """Raised inside a step; Home Assistant turns it into an abort result."""
+
+    def __init__(self, reason):
+        super().__init__(reason)
+        self.reason = reason
+
+
+class FlowHandler:
+    """Enough of a data entry flow to run its steps; results are dicts.
+    (Class attributes, as in Home Assistant, so subclasses needn't call
+    __init__; tests give each flow its own context.)"""
+
+    hass = None
+    context: dict = {}
+
+    def async_show_form(self, *, step_id, data_schema=None, errors=None,
+                        description_placeholders=None):
+        return {"type": "form", "step_id": step_id, "data_schema": data_schema,
+                "errors": errors or {}, "description_placeholders": description_placeholders}
+
+    def async_create_entry(self, *, data, title=None):
+        return {"type": "create_entry", "title": title, "data": data}
+
+    def async_abort(self, *, reason):
+        return {"type": "abort", "reason": reason}
+
+    def add_suggested_values_to_schema(self, schema, suggested):
+        self.suggested_values = dict(suggested)
+        return schema
+
+
+class ConfigFlow(FlowHandler):
+    """Existing entries for a test go in ConfigFlow.entries."""
+
+    entries: list = []
+    unique_id = None
+    reconfigure_entry = None
+
+    def __init_subclass__(cls, domain=None, **kwargs):
+        super().__init_subclass__(**kwargs)
+
+    async def async_set_unique_id(self, unique_id):
+        self.unique_id = unique_id
+
+    def _async_current_ids(self):
+        return {entry.unique_id for entry in ConfigFlow.entries}
+
+    def _abort_if_unique_id_configured(self, updates=None):
+        for entry in ConfigFlow.entries:
+            if entry.unique_id == self.unique_id:
+                if updates:
+                    entry.data = {**entry.data, **updates}
+                raise AbortFlow("already_configured")
+
+    def _abort_if_unique_id_mismatch(self, reason="unique_id_mismatch"):
+        if self.reconfigure_entry.unique_id != self.unique_id:
+            raise AbortFlow(reason)
+
+    def _get_reconfigure_entry(self):
+        return self.reconfigure_entry
+
+    def _set_confirm_only(self):
+        self.context["confirm_only"] = True
+
+    def async_update_reload_and_abort(self, entry, *, data_updates):
+        entry.data = {**entry.data, **data_updates}
+        return self.async_abort(reason="reconfigure_successful")
+
+
+class OptionsFlow(FlowHandler):
+    config_entry = None
+
+
+# What the integration asked Home Assistant to do, for tests to check.
+created_flows: list = []
+timers: list = []
+at_started: list = []
 
 mod("homeassistant")
 # Notifications shown, by notification_id: (title, message).
@@ -272,15 +353,25 @@ mod("homeassistant.const", ATTR_TEMPERATURE="temperature", CONF_HOST="host",
 mod("homeassistant.core", HomeAssistant=object, callback=lambda f: f)
 mod("homeassistant.exceptions", HomeAssistantError=HomeAssistantError,
     ServiceValidationError=ServiceValidationError)
-mod("homeassistant.config_entries", ConfigEntry=ConfigEntry, ConfigFlow=object, OptionsFlow=object,
+mod("homeassistant.config_entries", ConfigEntry=ConfigEntry, ConfigFlow=ConfigFlow,
+    OptionsFlow=OptionsFlow, SOURCE_INTEGRATION_DISCOVERY="integration_discovery",
     ConfigFlowResult=dict)
 mod("homeassistant.helpers")
 mod("homeassistant.helpers.config_validation", config_entry_only_config_schema=lambda domain: None)
-mod("homeassistant.helpers.typing", ConfigType=dict)
+mod("homeassistant.helpers.typing", ConfigType=dict, DiscoveryInfoType=dict)
+mod("homeassistant.helpers.discovery_flow",
+    async_create_flow=lambda hass, domain, context, data: created_flows.append(
+        (domain, context, data)))
+mod("homeassistant.helpers.event",
+    async_track_time_interval=lambda hass, action, interval, **kw: timers.append(
+        (action, interval, kw)))
+mod("homeassistant.helpers.start",
+    async_at_started=lambda hass, job: at_started.append(job))
 # Without async_register_platform_entity_service, like Home Assistant before
 # 2025.10; a test can add it to check the newer path.
 mod("homeassistant.helpers.service")
-mod("homeassistant.helpers.device_registry", DeviceInfo=dict)
+mod("homeassistant.helpers.device_registry", DeviceInfo=dict, DeviceEntry=object,
+    DeviceRegistry=object, async_entries_for_config_entry=lambda registry, entry_id: [])
 class EntityPlatform:
     """Records the entity services a platform registers."""
 

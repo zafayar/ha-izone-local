@@ -14,6 +14,7 @@ from homeassistant.helpers.typing import ConfigType
 from .api import IZoneClient, async_listen_for_changes
 from .const import CONF_UID, DOMAIN, brand_name, system_name, unit_model
 from .coordinator import IZoneConfigEntry, IZoneCoordinator
+from .discovery import async_start_discovery
 from .services import async_setup_services
 
 _LOGGER = logging.getLogger(__name__)
@@ -32,6 +33,7 @@ CONFIG_SCHEMA = cv.config_entry_only_config_schema(DOMAIN)
 
 async def async_setup(hass: HomeAssistant, config: ConfigType) -> bool:
     async_setup_services(hass)
+    async_start_discovery(hass)
     return True
 
 
@@ -64,16 +66,46 @@ async def async_setup_entry(hass: HomeAssistant, entry: IZoneConfigEntry) -> boo
     coordinator.ac_device_id = ac.id  # to show a firmware update
     await hass.config_entries.async_forward_entry_setups(entry, PLATFORMS)
     _link_zone_devices(registry, coordinator, ac.id)
-    entry.async_on_unload(entry.add_update_listener(_async_options_updated))
+    _remove_stale_devices(registry, entry, coordinator)
+    options = dict(entry.options)
+
+    async def options_updated(hass: HomeAssistant, entry: IZoneConfigEntry) -> None:
+        """Apply changed options. Reloading starts the notifications afresh,
+        so a filter warning that's still on is shown again once they're back
+        on. (Other updates, like a new address, reload the entry themselves.)"""
+        if entry.options == options:
+            return
+        if not entry.runtime_data.notifications_enabled:
+            entry.runtime_data.dismiss_notifications()
+        await hass.config_entries.async_reload(entry.entry_id)
+
+    entry.async_on_unload(entry.add_update_listener(options_updated))
     return True
 
 
-async def _async_options_updated(hass: HomeAssistant, entry: IZoneConfigEntry) -> None:
-    """Apply changed options. Reloading starts the notifications afresh, so a
-    filter warning that's still on is shown again once they're back on."""
-    if not entry.runtime_data.notifications_enabled:
-        entry.runtime_data.dismiss_notifications()
-    await hass.config_entries.async_reload(entry.entry_id)
+def _current_identifiers(coordinator: IZoneCoordinator) -> set[tuple[str, str]]:
+    """The devices the bridge reports now: the AC and each zone."""
+    return {(DOMAIN, coordinator.uid)} | {
+        (DOMAIN, f"{coordinator.uid}_zone{index}") for index in coordinator.data.zones
+    }
+
+
+def _remove_stale_devices(
+    registry: dr.DeviceRegistry, entry: IZoneConfigEntry, coordinator: IZoneCoordinator
+) -> None:
+    """Remove devices the bridge no longer reports, e.g. a zone taken out."""
+    current = _current_identifiers(coordinator)
+    for device in dr.async_entries_for_config_entry(registry, entry.entry_id):
+        if not device.identifiers & current:
+            _LOGGER.info("Removing %s: the bridge no longer reports it", device.name)
+            registry.async_update_device(device.id, remove_config_entry_id=entry.entry_id)
+
+
+async def async_remove_config_entry_device(
+    hass: HomeAssistant, entry: IZoneConfigEntry, device: dr.DeviceEntry
+) -> bool:
+    """Let the user delete a device, but only one the bridge no longer reports."""
+    return not device.identifiers & _current_identifiers(entry.runtime_data)
 
 
 def _link_zone_devices(

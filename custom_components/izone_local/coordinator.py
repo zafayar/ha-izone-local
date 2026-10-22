@@ -147,6 +147,10 @@ class IZoneCoordinator(DataUpdateCoordinator[IZoneData]):
                 translation_placeholders={"error": str(err)},
             ) from err
         data = IZoneData(system=system, zones=zones)
+        if self.data is not None and set(zones) != set(self.data.zones):
+            # Entities and devices are made per zone at setup.
+            _LOGGER.info("The bridge reports different zones now; reloading")
+            self.hass.config_entries.async_schedule_reload(self.config_entry.entry_id)
         self._settle(data)
         self._start_loop()  # e.g. a zone's sensor came back
         await self._refresh_firmware()
@@ -212,6 +216,11 @@ class IZoneCoordinator(DataUpdateCoordinator[IZoneData]):
             return
         if self.firmware:
             _LOGGER.info("iZone firmware changed: %s -> %s", self.firmware, firmware)
+            if set(firmware) != set(self.firmware):
+                # A module was added or removed: its sensor is made at setup.
+                self.hass.config_entries.async_schedule_reload(
+                    self.config_entry.entry_id
+                )
             changes = describe_firmware_changes(self.firmware, firmware)
             self._notify(
                 "firmware",

@@ -9,6 +9,7 @@ sys.path.insert(0, str(_ROOT / "custom_components"))
 
 import asyncio
 import json
+from types import SimpleNamespace
 
 import aiohttp
 import ha_stubs
@@ -52,7 +53,10 @@ async def main():
     host = f"127.0.0.1:{site._server.sockets[0].getsockname()[1]}"
     async with aiohttp.ClientSession() as s:
         entry = ConfigEntry({"host": host, "uid": "1"})
-        co = IZoneCoordinator(None, entry, IZoneClient(s, host), "1")
+        reloads = []
+        hass = SimpleNamespace(config_entries=SimpleNamespace(
+            async_schedule_reload=reloads.append))
+        co = IZoneCoordinator(hass, entry, IZoneClient(s, host), "1")
         entry.runtime_data = co
         await co.async_refresh()
         check("nothing to say: no notifications", notifications == {}, notifications)
@@ -94,10 +98,12 @@ async def main():
         await co.async_refresh()
         check("while off: none raised", notifications == {}, notifications)
         check("but the firmware is still read", co.hub_firmware == "4.40")
+        check("a module that's gone (CR) reloads the entry, for its sensor",
+              reloads == ["entry1"], reloads)
 
         # Turning them back on reloads the entry: a fresh coordinator.
         entry.options = {"notifications": True}
-        co = IZoneCoordinator(None, entry, IZoneClient(s, host), "1")
+        co = IZoneCoordinator(hass, entry, IZoneClient(s, host), "1")
         await co.async_refresh()
         check("back on: a warning that's still on is shown", FILTER in notifications)
         check("but the first read of the firmware isn't a change", FIRMWARE not in notifications)

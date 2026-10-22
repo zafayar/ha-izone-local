@@ -65,15 +65,21 @@ class Registry:
     def async_get_device(self, identifiers):
         return self._find(identifiers)
 
-    def async_update_device(self, device_id, *, via_device_id):
-        next(d for d in self.devices if d.id == device_id).via_device_id = via_device_id
+    def async_update_device(self, device_id, *, via_device_id=None,
+                            remove_config_entry_id=None):
+        device = next(d for d in self.devices if d.id == device_id)
+        if via_device_id is not None:
+            device.via_device_id = via_device_id
+        if remove_config_entry_id is not None:
+            self.devices.remove(device)
 
 
 REGISTRY = Registry()
-RELOADS, LISTENERS = [], []
+RELOADS, LISTENERS, ENTRY = [], [], []
 dr = sys.modules["homeassistant.helpers.device_registry"]
 dr.async_get = lambda hass: REGISTRY
 dr.DeviceRegistry = Registry
+dr.async_entries_for_config_entry = lambda registry, entry_id: list(registry.devices)
 # The integration imports this helper by name, so set it before importing it.
 SESSION = {}
 sys.modules["homeassistant.helpers.aiohttp_client"].async_get_clientsession = (
@@ -111,6 +117,7 @@ async def setup(session, host):
     unloads = []
     entry = ha_stubs.ConfigEntry({"host": host, "uid": "000012345"})
     entry.entry_id = "entry1"
+    ENTRY[:] = [entry]
     entry.async_on_unload = unloads.append
 
     async def forward(entry, platforms):
@@ -150,7 +157,12 @@ async def main():
     await site.start()
     host = f"127.0.0.1:{site._server.sockets[0].getsockname()[1]}"
     async with aiohttp.ClientSession() as s:
+        # A zone that has since been taken out of the system.
+        REGISTRY.async_get_or_create(config_entry_id="entry1",
+                                     identifiers={("izone_local", "000012345_zone7")})
         check("setup succeeds", await setup(s, host) is True)
+        check("a zone the bridge no longer reports is removed",
+              REGISTRY.async_get_device({("izone_local", "000012345_zone7")}) is None)
         ac = REGISTRY.async_get_device({("izone_local", "000012345")})
         zones = [REGISTRY.async_get_device({("izone_local", f"000012345_zone{i}")})
                  for i in range(3)]
@@ -165,6 +177,12 @@ async def main():
         check("options listener: turning notifications off clears them and reloads",
               LISTENERS == [1] and RELOADS == ["entry1"] and not ha_stubs.notifications,
               (LISTENERS, RELOADS, ha_stubs.notifications))
+        import izone_local
+        removable = await izone_local.async_remove_config_entry_device(
+            None, ENTRY[0], SimpleNamespace(identifiers={("izone_local", "000012345_zone9")}))
+        kept = await izone_local.async_remove_config_entry_device(None, ENTRY[0], zones[0])
+        check("the user can delete only devices the bridge doesn't report",
+              removable and not kept)
         count = len(REGISTRY.devices)
         check("second setup (a restart): no new devices, still linked",
               await setup(s, host) is True and len(REGISTRY.devices) == count
