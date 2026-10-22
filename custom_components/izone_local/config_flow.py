@@ -6,8 +6,14 @@ import logging
 from typing import Any
 
 import voluptuous as vol
-from homeassistant.config_entries import ConfigFlow, ConfigFlowResult
+from homeassistant.config_entries import (
+    ConfigEntry,
+    ConfigFlow,
+    ConfigFlowResult,
+    OptionsFlow,
+)
 from homeassistant.const import CONF_HOST
+from homeassistant.core import callback
 from homeassistant.helpers.aiohttp_client import async_get_clientsession
 
 from .api import (
@@ -17,7 +23,13 @@ from .api import (
     async_discover,
     clean_name,
 )
-from .const import CONF_UID, DOMAIN, brand_name
+from .const import (
+    CONF_NOTIFICATIONS,
+    CONF_UID,
+    DEFAULT_NOTIFICATIONS,
+    DOMAIN,
+    brand_name,
+)
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -29,6 +41,11 @@ class IZoneLocalConfigFlow(ConfigFlow, domain=DOMAIN):
 
     def __init__(self) -> None:
         self._discovered: dict[str, DiscoveredBridge] = {}
+
+    @staticmethod
+    @callback
+    def async_get_options_flow(config_entry: ConfigEntry) -> OptionsFlow:
+        return IZoneLocalOptionsFlow()
 
     async def async_step_user(
         self, user_input: dict[str, Any] | None = None
@@ -102,4 +119,23 @@ class IZoneLocalConfigFlow(ConfigFlow, domain=DOMAIN):
         return self.async_create_entry(
             title=f"{brand_name(system)} {tag or uid}",
             data={CONF_HOST: host, CONF_UID: uid},
+        )
+
+
+class IZoneLocalOptionsFlow(OptionsFlow):
+    """Turn the integration's notifications on or off."""
+
+    async def async_step_init(
+        self, user_input: dict[str, Any] | None = None
+    ) -> ConfigFlowResult:
+        if user_input is not None:
+            return self.async_create_entry(data=user_input)
+        current = self.config_entry.options.get(
+            CONF_NOTIFICATIONS, DEFAULT_NOTIFICATIONS
+        )
+        return self.async_show_form(
+            step_id="init",
+            data_schema=vol.Schema(
+                {vol.Required(CONF_NOTIFICATIONS, default=current): bool}
+            ),
         )

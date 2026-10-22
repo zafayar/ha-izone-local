@@ -19,6 +19,15 @@
       "cannot_connect": "Could not reach the discovered bridge."
     }
   },
+  "options": {
+    "step": {
+      "init": {
+        "title": "iZone options",
+        "description": "Notifications appear in Home Assistant when the controller says the filter is due a clean, and when a module's firmware changes.",
+        "data": { "notifications": "Show notifications" }
+      }
+    }
+  },
   "entity": {
     "binary_sensor": {
       "filter_warning": { "name": "Filter warning" },

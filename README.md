@@ -162,8 +162,26 @@ automation:
 ```
 
 For issue reports, **Download diagnostics** on the AC's device page gives the
-raw system, zone and favourite data and any pending changes. The bridge's
-password and lock code, its IP address and its ID are removed.
+raw system, zone and favourite data, firmware versions and any pending
+changes. The bridge's password and lock code, its IP address, its ID and the
+hub's serial number are removed.
+
+If the bridge answers with every field zeroed (it does now and then while the
+unit runs), the last good state is kept for up to 5 minutes rather than
+showing the AC as off; changes being applied wait for real data.
+
+### Notifications
+
+Home Assistant shows a notification:
+
+- **when the filter is due a clean**, while the controller's filter warning is
+  on. It's raised once per warning (dismissing it won't bring it back every
+  poll) and clears itself when the warning goes, after the reminder is reset
+  on the wall controller or in the iZone app.
+- **when firmware changes**, listing which modules changed (checked every 6
+  hours).
+
+Turn them off with **Configure** on the integration's entry.
 
 ### Names
 
@@ -287,6 +305,7 @@ python -m unittest discover -s tests -v
 Each scenario in `tests/scenarios/` can also be run on its own and prints a
 line per check. `tests/live/` has scripts that drive a real bridge and then
 restore it (see its README). CI (`.github/workflows/ci.yml`) runs the tests,
+ruff (settings in `pyproject.toml`; run `ruff check custom_components tests`),
 Home Assistant's hassfest validation and the HACS validation.
 
 The HACS validation also checks the GitHub repository itself: it needs a

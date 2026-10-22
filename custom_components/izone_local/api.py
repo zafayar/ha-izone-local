@@ -371,6 +371,23 @@ def parse_firmware(text: Any) -> dict[str, str]:
     return modules
 
 
+def describe_firmware_changes(old: dict[str, str], new: dict[str, str]) -> list[str]:
+    """One line per module that changed, appeared or went, e.g.
+    "CR: 3.23 -> 3.25". Unchanged modules are left out."""
+    lines = []
+    for module in [*old, *(m for m in new if m not in old)]:
+        before, after = old.get(module), new.get(module)
+        if before == after:
+            continue
+        if before is None:
+            lines.append(f"{module}: new, {after}")
+        elif after is None:
+            lines.append(f"{module}: no longer reported (was {before})")
+        else:
+            lines.append(f"{module}: {before} -> {after}")
+    return lines
+
+
 def to_centi(celsius: float) -> int:
     """15.0-30.0 C in 0.5 steps -> 1500-3000."""
     # floor(x + 0.5), not round(): round() is banker's rounding (22.25 -> 22.0

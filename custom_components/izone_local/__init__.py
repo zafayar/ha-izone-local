@@ -54,7 +54,16 @@ async def async_setup_entry(hass: HomeAssistant, entry: IZoneConfigEntry) -> boo
     coordinator.ac_device_id = ac.id  # to show a firmware update
     await hass.config_entries.async_forward_entry_setups(entry, PLATFORMS)
     _link_zone_devices(registry, coordinator, ac.id)
+    entry.async_on_unload(entry.add_update_listener(_async_options_updated))
     return True
+
+
+async def _async_options_updated(hass: HomeAssistant, entry: IZoneConfigEntry) -> None:
+    """Apply changed options. Reloading starts the notifications afresh, so a
+    filter warning that's still on is shown again once they're back on."""
+    if not entry.runtime_data.notifications_enabled:
+        entry.runtime_data.dismiss_notifications()
+    await hass.config_entries.async_reload(entry.entry_id)
 
 
 def _link_zone_devices(

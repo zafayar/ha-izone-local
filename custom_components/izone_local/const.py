@@ -9,6 +9,10 @@ DOMAIN = "izone_local"
 MANUFACTURER = "iZone"
 
 CONF_UID = "uid"
+# Option: Home Assistant notifications when the filter is due a clean and when
+# firmware changes. On unless turned off under the integration's Configure.
+CONF_NOTIFICATIONS = "notifications"
+DEFAULT_NOTIFICATIONS = True
 
 SCAN_INTERVAL = timedelta(seconds=15)
 

@@ -10,13 +10,20 @@ from collections.abc import Awaitable, Callable, Coroutine, Iterable
 from dataclasses import dataclass, field
 from typing import Any
 
+from homeassistant.components import persistent_notification
 from homeassistant.config_entries import ConfigEntry
 from homeassistant.core import HomeAssistant
 from homeassistant.helpers import device_registry as dr
 from homeassistant.helpers.update_coordinator import DataUpdateCoordinator, UpdateFailed
 
 from . import const as c
-from .api import IZoneClient, IZoneCommandError, IZoneError, from_centi
+from .api import (
+    IZoneClient,
+    IZoneCommandError,
+    IZoneError,
+    describe_firmware_changes,
+    from_centi,
+)
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -113,6 +120,7 @@ class IZoneCoordinator(DataUpdateCoordinator[IZoneData]):
         self.firmware: dict[str, str] = {}
         self._firmware_due = 0.0
         self.ac_device_id: str | None = None  # set once the device exists
+        self._filter_notified = False  # raised for the current filter warning
 
     @property
     def hub_firmware(self) -> str | None:
@@ -138,7 +146,51 @@ class IZoneCoordinator(DataUpdateCoordinator[IZoneData]):
         self._settle(data)
         self._start_loop()  # e.g. a zone's sensor came back
         await self._refresh_firmware()
+        self._update_filter_notification(system)
         return data
+
+    # Notifications -------------------------------------------------------
+
+    @property
+    def notifications_enabled(self) -> bool:
+        return self.config_entry.options.get(
+            c.CONF_NOTIFICATIONS, c.DEFAULT_NOTIFICATIONS
+        )
+
+    def _notification_id(self, kind: str) -> str:
+        return f"{c.DOMAIN}_{self.uid}_{kind}"
+
+    def _notify(self, kind: str, title: str, message: str) -> None:
+        if self.notifications_enabled:
+            persistent_notification.async_create(
+                self.hass, message, title=title, notification_id=self._notification_id(kind)
+            )
+
+    def dismiss_notifications(self) -> None:
+        """Remove this bridge's notifications (the option was turned off)."""
+        for kind in ("filter", "firmware"):
+            persistent_notification.async_dismiss(self.hass, self._notification_id(kind))
+
+    def _update_filter_notification(self, system: dict[str, Any]) -> None:
+        """Notify once per filter warning (a dismissed notification isn't
+        raised again every poll), and clear it when the warning goes."""
+        due = str(system.get("Warnings", "")).lower() == "filter"
+        if due and not self._filter_notified:
+            months = system.get("FilterWarn")
+            every = f" (its reminder is set to every {months} months)" if months else ""
+            self._notify(
+                "filter",
+                "iZone: filter due for a clean",
+                f"The iZone controller says the return-air filter is due a clean{every}. "
+                "It's a reminder timer, not a measurement. After cleaning, reset it "
+                "on the wall controller or in the iZone app; this notification then "
+                "clears itself.",
+            )
+        elif not due and self._filter_notified:
+            persistent_notification.async_dismiss(
+                self.hass, self._notification_id("filter")
+            )
+        self._filter_notified = due
 
     async def _refresh_firmware(self) -> None:
         """Re-read the firmware list when it's due. Never fails the poll."""
@@ -156,6 +208,12 @@ class IZoneCoordinator(DataUpdateCoordinator[IZoneData]):
             return
         if self.firmware:
             _LOGGER.info("iZone firmware changed: %s -> %s", self.firmware, firmware)
+            changes = describe_firmware_changes(self.firmware, firmware)
+            self._notify(
+                "firmware",
+                "iZone firmware updated",
+                "\n".join(f"- {line}" for line in changes),
+            )
         self.firmware = firmware
         if self.ac_device_id and self.hub_firmware:
             dr.async_get(self.hass).async_update_device(

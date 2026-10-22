@@ -35,6 +35,7 @@ class Device:
         self.identifiers = identifiers
         self.via_device_id = None
         self.name = None
+        self.sw_version = None
 
 
 class Registry:
@@ -48,7 +49,7 @@ class Registry:
         return next((d for d in self.devices if d.identifiers & identifiers), None)
 
     def async_get_or_create(self, *, config_entry_id, identifiers, via_device=None,
-                            via_device_id=None, name=None, **_):
+                            via_device_id=None, name=None, sw_version=None, **_):
         if via_device is not None:
             self.deprecated.append(identifiers)
         device = self._find(identifiers)
@@ -56,6 +57,7 @@ class Registry:
             device = Device(len(self.devices), set(identifiers))
             self.devices.append(device)
         device.name = name or device.name
+        device.sw_version = sw_version or device.sw_version
         if via_device_id is not None:
             device.via_device_id = via_device_id
         return device
@@ -68,6 +70,7 @@ class Registry:
 
 
 REGISTRY = Registry()
+RELOADS, LISTENERS = [], []
 dr = sys.modules["homeassistant.helpers.device_registry"]
 dr.async_get = lambda hass: REGISTRY
 dr.DeviceRegistry = Registry
@@ -91,6 +94,8 @@ async def req(r):
     b = (await r.json())["iZoneV2Request"]
     if b["Type"] == 1:
         return web.Response(text=json.dumps({"AirStreamDeviceUId": "000012345", "SystemV2": SYS}))
+    if b["Type"] == 6:
+        return web.Response(text=json.dumps({"Fmw": "COCB-2F5 4.36 (000000042),CR 3.23"}))
     if b["Type"] == 3:
         return web.Response(text=json.dumps({"SchedulesV2": {"Name": "", "Zones": []}}))
     return web.Response(text=json.dumps({"ZonesV2": Z[b["No"]]}))
@@ -119,8 +124,18 @@ async def setup(session, host):
 
             await module.async_setup_entry(hass, entry, add)
 
-    hass = SimpleNamespace(config_entries=SimpleNamespace(async_forward_entry_setups=forward))
+    async def reload(entry_id):
+        RELOADS.append(entry_id)
+
+    hass = SimpleNamespace(config_entries=SimpleNamespace(
+        async_forward_entry_setups=forward, async_reload=reload))
     ok = await integration.async_setup_entry(hass, entry)
+    if len(entry.update_listeners) == 1:
+        # Options changed: notifications turned off.
+        entry.options = {"notifications": False}
+        ha_stubs.notifications["izone_local_000012345_filter"] = ("Filter", "")
+        await entry.update_listeners[0](hass, entry)
+    LISTENERS.append(len(entry.update_listeners))
     for close in unloads:
         close()
     return ok
@@ -145,6 +160,11 @@ async def main():
         check("every zone device linked to the AC by device ID",
               all(z is not None and z.via_device_id == ac.id for z in zones),
               [(z and z.via_device_id) for z in zones])
+        check("hub firmware is the AC device's software version", ac.sw_version == "4.36",
+              ac.sw_version)
+        check("options listener: turning notifications off clears them and reloads",
+              LISTENERS == [1] and RELOADS == ["entry1"] and not ha_stubs.notifications,
+              (LISTENERS, RELOADS, ha_stubs.notifications))
         count = len(REGISTRY.devices)
         check("second setup (a restart): no new devices, still linked",
               await setup(s, host) is True and len(REGISTRY.devices) == count

@@ -203,7 +203,13 @@ class ServiceValidationError(HomeAssistantError):
 class ConfigEntry[T]:
     def __init__(self, data):
         self.data = data
+        self.options = {}
         self.runtime_data = None
+        self.update_listeners = []
+
+    def add_update_listener(self, listener):
+        self.update_listeners.append(listener)
+        return lambda: self.update_listeners.remove(listener)
 
     def async_create_background_task(self, hass, coro, name):
         import asyncio
@@ -211,7 +217,22 @@ class ConfigEntry[T]:
 
 
 mod("homeassistant")
-mod("homeassistant.components")
+# Notifications shown, by notification_id: (title, message).
+notifications: dict[str, tuple[str, str]] = {}
+
+
+def _create_notification(hass, message, title=None, notification_id=None):
+    notifications[notification_id] = (title, message)
+
+
+def _dismiss_notification(hass, notification_id):
+    notifications.pop(notification_id, None)
+
+
+persistent_notification = mod(
+    "homeassistant.components.persistent_notification",
+    async_create=_create_notification, async_dismiss=_dismiss_notification)
+mod("homeassistant.components", persistent_notification=persistent_notification)
 mod("homeassistant.components.climate", HVACMode=HVACMode, ClimateEntity=ClimateEntity,
     ClimateEntityFeature=ClimateEntityFeature, FAN_AUTO="auto", FAN_LOW="low",
     FAN_MEDIUM="medium", FAN_HIGH="high", ATTR_HVAC_MODE="hvac_mode")
@@ -228,10 +249,10 @@ mod("homeassistant.const", ATTR_TEMPERATURE="temperature", CONF_HOST="host",
     PERCENTAGE="%", EntityCategory=EntityCategory, UnitOfTemperature=UnitOfTemperature,
     UnitOfTime=UnitOfTime,
     Platform=Platform)
-mod("homeassistant.core", HomeAssistant=object)
+mod("homeassistant.core", HomeAssistant=object, callback=lambda f: f)
 mod("homeassistant.exceptions", HomeAssistantError=HomeAssistantError,
     ServiceValidationError=ServiceValidationError)
-mod("homeassistant.config_entries", ConfigEntry=ConfigEntry, ConfigFlow=object,
+mod("homeassistant.config_entries", ConfigEntry=ConfigEntry, ConfigFlow=object, OptionsFlow=object,
     ConfigFlowResult=dict)
 mod("homeassistant.helpers")
 mod("homeassistant.helpers.device_registry", DeviceInfo=dict)
