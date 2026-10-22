@@ -90,6 +90,8 @@ async def main():
         check("one sensor per module", sorted(fw) == ["1_firmware_c225-1o9",
               "1_firmware_cctsl-4e9", "1_firmware_hub"], sorted(fw))
         hub = fw["1_firmware_hub"]
+        check("firmware sensors are off by default",
+              not any(e._attr_entity_registry_enabled_default for e in fw.values()))
         check("hub sensor: version and name", hub.native_value == "4.36"
               and hub._attr_translation_placeholders == {"module": "hub"})
         check("the serial number isn't kept", "000000042" not in json.dumps(co.firmware))

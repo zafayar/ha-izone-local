@@ -1,0 +1,119 @@
+# Home Assistant integration quality scale, rule by rule.
+# https://developers.home-assistant.io/docs/core/integration-quality-scale/
+# (hassfest only checks this file for core integrations; it follows the same
+# format.)
+rules:
+  # Bronze
+  action-setup:
+    status: done
+    comment: >-
+      Registered when the integration loads (services.py) on Home Assistant
+      2025.10+, where the helper for entity actions exists; on older versions
+      the scene platform registers it.
+  appropriate-polling:
+    status: done
+    comment: >-
+      15 s, plus an immediate read when the bridge broadcasts a change.
+      Firmware every 6 hours.
+  brands:
+    status: done
+    comment: Icon in custom_components/izone_local/brand/.
+  common-modules: done
+  config-flow: done
+  config-flow-test-coverage:
+    status: done
+    comment: tests/scenarios/config_flow.py, against Home Assistant stand-ins.
+  dependency-transparency:
+    status: exempt
+    comment: No dependencies; the bridge client is part of the integration (api.py).
+  docs-actions: done
+  docs-conditions:
+    status: exempt
+    comment: The integration provides no conditions (the README says so).
+  docs-high-level-description: done
+  docs-installation-instructions: done
+  docs-removal-instructions: done
+  docs-triggers:
+    status: exempt
+    comment: The integration provides no triggers (the README says so).
+  entity-event-setup:
+    status: exempt
+    comment: >-
+      Entities subscribe to nothing themselves; the coordinator listens for
+      the bridge's change broadcasts.
+  entity-unique-id: done
+  has-entity-name: done
+  runtime-data: done
+  test-before-configure: done
+  test-before-setup: done
+  unique-config-entry: done
+
+  # Silver
+  action-exceptions: done
+  config-entry-unloading: done
+  docs-configuration-parameters: done
+  docs-installation-parameters: done
+  entity-unavailable: done
+  integration-owner: done
+  log-when-unavailable: done
+  parallel-updates: done
+  reauthentication-flow:
+    status: exempt
+    comment: The local API has no authentication.
+  test-coverage:
+    status: done
+    comment: >-
+      Every module over 95% (branch coverage), measured in CI, which fails
+      below 95% in total.
+
+  # Gold
+  devices: done
+  diagnostics: done
+  discovery:
+    status: done
+    comment: >-
+      The bridges' own UDP discovery (discovery.py), at start-up and every
+      30 minutes, as integration discovery; they offer no zeroconf, SSDP or
+      known DHCP signature.
+  discovery-update-info: done
+  docs-data-update: done
+  docs-examples: done
+  docs-known-limitations: done
+  docs-supported-devices: done
+  docs-supported-functions: done
+  docs-troubleshooting: done
+  docs-use-cases: done
+  dynamic-devices:
+    status: done
+    comment: >-
+      Zones are set on the controller by an installer and rarely change. When
+      they do (or a firmware module appears), the entry reloads by itself to
+      add them.
+  entity-category: done
+  entity-device-class: done
+  entity-disabled-by-default: done
+  entity-translations: done
+  exception-translations: done
+  icon-translations:
+    status: done
+    comment: >-
+      icons.json, apart from the icon showing a change's progress (queued,
+      sending, failed), which follows an attribute rather than the state.
+  reconfiguration-flow: done
+  repair-issues:
+    status: exempt
+    comment: >-
+      Nothing to repair from Home Assistant: an unreachable bridge shows as
+      unavailable (with the Bridge problem sensor), a new address is picked
+      up by discovery or Reconfigure, and the filter reminder is a
+      notification.
+  stale-devices: done
+
+  # Platinum
+  async-dependency: done
+  inject-websession: done
+  strict-typing:
+    status: todo
+    comment: >-
+      The code is typed, but checking it with mypy --strict needs Home
+      Assistant installed in CI.

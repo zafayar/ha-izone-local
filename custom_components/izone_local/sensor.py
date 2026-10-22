@@ -196,6 +196,8 @@ class IZoneFirmwareSensor(IZoneEntity, SensorEntity):
 
     _attr_translation_key = "firmware"
     _attr_entity_category = EntityCategory.DIAGNOSTIC
+    # Rarely needed: the hub's version is also on the AC's device page.
+    _attr_entity_registry_enabled_default = False
 
     def __init__(self, coordinator: IZoneCoordinator, module: str) -> None:
         label, key = firmware_label(module)

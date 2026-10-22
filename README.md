@@ -10,17 +10,46 @@ It does not use the cloud.
 > library). This one is separate. Its domain is `izone_local`, so both can be
 > installed. Don't add the same bridge to both.
 
+## Supported devices
+
+- **Supported:** iZone ducted systems (also sold as Rinnai and other brands,
+  see [Names](#names)) whose bridge supports the v2 local API. The bridge
+  says so when it answers discovery: its capabilities include `iZoneV2`.
+- **Tested with:** a Rinnai-branded system with a COCB-2F5 hub (firmware
+  4.36), a C225 board and a CCTSL wall controller, five zones including a
+  bypass zone. Details under [Testing status](#testing-status).
+- **Not supported:** bridges without the v2 API (use Home Assistant's
+  built-in `izone` integration), and the split, VRF, iLight, iDrate and
+  iPower parts of a system (see [Known limitations](#known-limitations)).
+
+## What you can do with it
+
+- Run each room from its own zone entity: turning on a zone starts the AC,
+  and turning off the last one stops it.
+- Use the zone temperatures and modes in automations, for example warming
+  the bedrooms before bedtime or closing zones when everyone leaves.
+- Run the favourites saved in the iZone app as scenes, and change what they
+  store from Home Assistant.
+- Get told when the filter is due a clean, and keep an eye on wireless zone
+  sensors' batteries and signal.
+- Recover a bridge that stops responding, with the Bridge problem sensor and
+  a smart plug.
+
 ## What you get
 
 | Entity | Notes |
 | --- | --- |
 | AC climate | Off / Cool / Heat / Fan only / Dry / Heat-Cool (iZone "Auto"); fan speeds as the unit reports them (`FanAutoEn`, `FanAutoType`): low, medium and high, plus auto and top where the fan has them. When a control zone is set (`CtrlZone`), the target and current temperature come from that zone. |
 | Zone climate (one per zone, on its own device named after the zone, which suggests a room of the same name) | Off = damper closed (or the AC is off), Fan only = open, Auto = temperature-controlled (only on zones of type Auto). Setting a temperature on a closed or open zone switches it to Auto. Zones also switch the AC on and off; see below. Bypass zones get no climate entity, because the system controls them itself. |
-| Sensors | Supply air temperature, return air temperature, AC error code, AC run hours, control zone (the zone the unit is following, or `unit`), firmware version of each module (hub, wall controller, boards; read every 6 hours, and the hub's is also the AC device's software version); zone temperature and damper position, plus battery and signal strength for wireless zone sensors. |
+| Sensors | Supply air temperature, return air temperature, AC error code, AC run hours, control zone (the zone the unit is following, or `unit`), firmware version of each module (hub, wall controller, boards; off by default, as the hub's version is also the AC device's software version); zone temperature and damper position, plus battery and signal strength for wireless zone sensors. |
 | Binary sensors | Filter warning, AC fault, bridge problem; zone sensor fault and damper fault. |
 | Switch | iSave (only if the system has iSave enabled). |
 | Scenes | One per favourite saved on the controller (see below). |
 | Numbers | Each zone's minimum and maximum airflow (settings, off by default). |
+
+The integration has one action, `izone_local.update_favourite` (see
+[Favourites](#favourites)). It adds no triggers or conditions of its own; use
+the entities' states and attributes in automations.
 
 ### The AC follows the zones
 
@@ -221,6 +250,17 @@ values fall back to "iZone".
 
 ## Install
 
+**Before you start:**
+
+- Home Assistant 2025.2 or later. (The integration's icon shows from 2026.3;
+  earlier versions show a placeholder.)
+- The iZone bridge on the same network as Home Assistant, with the v2 local
+  API. Give it a fixed address (a DHCP reservation in your router).
+- For discovery and instant updates, Home Assistant must receive UDP
+  broadcasts from the bridge's subnet (ports 12107 and 7005). In Docker, that
+  needs host networking. Without them you can still enter the address, and
+  changes made elsewhere show at the next poll.
+
 **With HACS (recommended):**
 
 1. Click the **Open in HACS** badge above, or in HACS open the ⋮ menu →
@@ -235,16 +275,39 @@ HACS offers updates as new releases are published.
 `config/custom_components/` folder, restart, then add the integration as in
 step 3.
 
-Home Assistant 2025.2 or later is needed. The integration's icon shows from
-2026.3 (earlier versions show a placeholder).
+Once the integration is installed, a bridge found on the network also shows
+under **Discovered** in Devices & services; click **Add** to set it up.
 
-Setup broadcasts `IASD` on UDP port 12107 to find bridges. If nothing answers
-(for example, Home Assistant is in Docker without host networking, or on
-another VLAN), you can type the bridge's IP address. Give the bridge a DHCP
-reservation. If its IP address changes, run setup again: the integration
-recognises the bridge by its ID and updates the existing entry.
+### Setup fields
 
-## How it works
+- **Bridge:** the v2 bridges found by a broadcast (`IASD` on UDP 12107).
+  Choose **Enter an IP address** if yours isn't listed.
+- **IP address:** asked for when no bridge is found (for example, Home
+  Assistant is on another VLAN), or when you choose to enter it.
+
+The bridge is recognised by its ID, so it can't be added twice. If its
+address changes, discovery updates the entry on its own (when broadcasts
+reach Home Assistant); otherwise use **Reconfigure** on the entry and enter
+the new address.
+
+### Options
+
+**Configure** on the integration's entry has one option:
+
+- **Show notifications** (on by default): notify when the filter is due a
+  clean and when firmware changes. See [Notifications](#notifications).
+
+### Removing it
+
+1. Go to **Settings → Devices & services → iZone Local**, open the ⋮ menu on
+   the entry and choose **Delete**. Its devices and entities go with it.
+2. To uninstall it too, remove **iZone Local (API v2)** in HACS (or delete
+   `config/custom_components/izone_local`), then restart Home Assistant.
+
+Nothing is changed on the bridge or the controller, apart from any
+favourites you edited.
+
+## How data is updated
 
 - **Polling:** every 15 seconds the integration makes one `Type 1` request
   (system) and one `Type 2` request for each zone, all to
@@ -261,15 +324,126 @@ recognises the bridge by its ID and updates the existing entry.
   reports the change 0–2 s later. See "How changes are applied" above.
 - **Temperatures:** the API sends whole numbers in hundredths of a degree
   (2350 = 23.5 °C). Setpoints are limited to 15–30 °C in 0.5° steps.
+- **Less often:** firmware versions every 6 hours; favourites when the
+  integration starts (reload it after changing them in the app); a discovery
+  broadcast when Home Assistant starts and every 30 minutes, which also picks
+  up a bridge's new address.
+- **Zones added or removed** on the controller are picked up at the next
+  poll: the entry reloads, and devices for zones that are gone are removed.
 
-## Not yet supported
+## Known limitations
 
-Schedules (timed favourites), renaming favourites, split and VRF systems,
-iLight, iDrate and iPower.
+- Not supported: schedules (timed favourites), renaming favourites, split
+  and VRF systems, iLight, iDrate and iPower.
+- The sleep timer is left out on purpose: on a real controller, setting it
+  turns the AC on, and setting it back to 0 doesn't cancel it (only turning
+  the AC off does, about 10 s later), so it doesn't work as a setting.
+- Favourites are read when the integration starts. After adding or renaming
+  one in the app, reload the integration.
+- Changes made at the wall controller or in the app show within seconds only
+  if the bridge's broadcasts reach Home Assistant; otherwise within 15 s.
+- The controller can take up to a minute to finish a favourite, and ignores
+  zone commands meanwhile.
+- One bridge per entry; add each bridge as its own entry.
 
-The sleep timer is left out on purpose: on a real controller, setting it
-turns the AC on, and setting it back to 0 doesn't cancel it (only turning the
-AC off does, about 10 s later), so it doesn't work as a setting.
+## Examples
+
+Warm the bedrooms on cold evenings:
+
+```yaml
+automation:
+  - alias: Warm the bedrooms at 8:30 pm
+    triggers:
+      - trigger: time
+        at: "20:30:00"
+    conditions:
+      - condition: numeric_state
+        entity_id: climate.master
+        attribute: current_temperature
+        below: 18
+    actions:
+      - action: climate.set_temperature
+        target: { entity_id: [climate.master, climate.kids] }
+        data: { temperature: 21, hvac_mode: auto }
+```
+
+The AC turns on with the first zone, in whatever mode it was last in.
+
+Close every zone when the house is empty (the AC turns off with the last
+one):
+
+```yaml
+automation:
+  - alias: Everyone out, zones off
+    triggers:
+      - trigger: state
+        entity_id: zone.home
+        to: "0"
+        for: "00:10:00"
+    actions:
+      - action: climate.turn_off
+        target: { entity_id: [climate.living, climate.master, climate.kids] }
+```
+
+Switch a favourite to heating for winter:
+
+```yaml
+automation:
+  - alias: Evening favourite heats from May
+    triggers:
+      - trigger: template
+        value_template: "{{ now().month == 5 and now().day == 1 }}"
+    actions:
+      - action: izone_local.update_favourite
+        target: { entity_id: scene.evening }
+        data: { mode: heat }
+```
+
+Warn when a wireless zone sensor's battery is running out:
+
+```yaml
+automation:
+  - alias: iZone sensor battery low
+    triggers:
+      - trigger: state
+        entity_id: sensor.master_sensor_battery
+        to: empty
+    actions:
+      - action: persistent_notification.create
+        data:
+          message: The Master zone sensor needs new batteries.
+```
+
+The power-cycle example for an unresponsive bridge is under
+[Bridge health and diagnostics](#bridge-health-and-diagnostics).
+
+## Troubleshooting
+
+- **The bridge isn't found during setup.** Discovery uses UDP broadcasts,
+  which don't cross VLANs or reach Docker without host networking. Enter the
+  bridge's IP address instead. If that fails too, check the address, and that
+  the bridge has the v2 API (its discovery reply includes `iZoneV2`; older
+  bridges only have v1).
+- **Changes made at the wall controller take 15 s to show.** The bridge's
+  change broadcasts (UDP 7005) aren't reaching Home Assistant; see above.
+  Polling still picks them up.
+- **Entities are unavailable.** Home Assistant can't reach the bridge. Check
+  that its address hasn't changed (use **Reconfigure** if it has) and that
+  it's powered. The **Bridge problem** sensor turns on after repeated
+  failures, and the log says what failed.
+- **A change shows `failed`, or the action raises an error.** The bridge
+  accepted the command 3 times without applying it, or nothing was confirmed
+  within 30 s. The wall controller is often just busy; try again. A zone
+  whose sensor has dropped out can't take Auto or a temperature; such a
+  change waits with `waiting for sensor` instead.
+- **A favourite doesn't fully apply.** The controller can take up to a minute;
+  the integration sends what's still missing after 60 s.
+- **Editing a favourite raises "didn't keep the change".** The controller
+  didn't store it after 3 tries. Try again, or check the favourite in the
+  iZone app.
+
+For anything else, turn on debug logging (see below) and download the
+diagnostics from the AC's device page.
 
 ## Testing status
 
@@ -327,9 +501,15 @@ python -m unittest discover -s tests -v
 
 Each scenario in `tests/scenarios/` can also be run on its own and prints a
 line per check. `tests/live/` has scripts that drive a real bridge and then
-restore it (see its README). CI (`.github/workflows/ci.yml`) runs the tests,
-ruff (settings in `pyproject.toml`; run `ruff check custom_components tests`),
-Home Assistant's hassfest validation and the HACS validation.
+restore it (see its README). CI (`.github/workflows/ci.yml`) runs the tests
+with coverage (it fails below 95%), ruff (settings in `pyproject.toml`; run
+`ruff check custom_components tests`), Home Assistant's hassfest validation
+and the HACS validation.
+
+How the integration measures up to Home Assistant's
+[integration quality scale](https://developers.home-assistant.io/docs/core/integration-quality-scale/)
+is recorded rule by rule in
+[`quality_scale.yaml`](custom_components/izone_local/quality_scale.yaml).
 
 The HACS validation also checks the GitHub repository itself: it needs a
 description, topics (for example `home-assistant`, `hacs`, `izone`) and
