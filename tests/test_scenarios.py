@@ -5,6 +5,7 @@
 Each scenario is a script that prints PASS/FAIL lines and "ALL PASSED".
 """
 
+import os
 import pathlib
 import subprocess
 import sys
@@ -26,11 +27,12 @@ class Scenarios(unittest.TestCase):
                     check=False,
                 )
                 failed = [ln for ln in result.stdout.splitlines() if ln.startswith("FAIL")]
-                self.assertIn(
-                    "ALL PASSED",
-                    result.stdout,
-                    "\n".join(failed) or result.stderr[-3000:],
-                )
+                detail = "\n".join(failed) or result.stderr[-3000:]
+                if "ALL PASSED" not in result.stdout and os.environ.get("GITHUB_ACTIONS"):
+                    # Annotations show on the run page without opening the log.
+                    message = detail.replace("%", "%25").replace("\n", "%0A")
+                    print(f"::error title={path.stem} failed::{message}", flush=True)
+                self.assertIn("ALL PASSED", result.stdout, detail)
 
 
 if __name__ == "__main__":

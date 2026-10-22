@@ -44,15 +44,20 @@ async def main():
     check("bridge broadcast passed on; other messages ignored",
           got == ["iZoneChanged_Zones"], got)
 
+    # A second bridge's listener can share the port. (Which socket gets a
+    # unicast datagram on a shared port differs by OS, so it isn't sent one;
+    # real broadcasts reach every socket.)
     t2 = await api.async_listen_for_changes("10.9.9.9", got.append, port=port)
-    got.clear()
-    send(b"iZoneChanged_System", port)
-    await asyncio.sleep(0.2)
     check("second listener can share the port", t2 is not None)
-    check("a broadcast from another address is ignored by its listener",
-          got == ["iZoneChanged_System"], got)  # only the 127.0.0.1 listener
     t.close()
     t2.close()
+
+    other = []
+    t3 = await api.async_listen_for_changes("10.9.9.9", other.append, port=port + 1)
+    send(b"iZoneChanged_System", port + 1)
+    await asyncio.sleep(0.2)
+    check("a broadcast from another address is ignored", other == [], other)
+    t3.close()
 
     # The coordinator refreshes on a broadcast, unless its loop is running.
     entry = ConfigEntry({"host": "x", "uid": "1"})

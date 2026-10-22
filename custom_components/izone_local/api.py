@@ -12,7 +12,6 @@ Temperatures are integers in hundredths of a degree (2350 == 23.5 C).
 from __future__ import annotations
 
 import asyncio
-import contextlib
 import json
 import logging
 import math
@@ -155,11 +154,10 @@ async def async_listen_for_changes(
     loop = asyncio.get_running_loop()
     sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM, socket.IPPROTO_UDP)
     try:
-        # Let several bridges (config entries) share the port.
+        # Let several bridges (config entries) share the port; a broadcast
+        # reaches every socket bound to it. (Not SO_REUSEPORT: on Linux that
+        # shares datagrams out between the sockets instead.)
         sock.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
-        if hasattr(socket, "SO_REUSEPORT"):
-            with contextlib.suppress(OSError):
-                sock.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEPORT, 1)
         sock.setblocking(False)
         sock.bind(("", port))
         transport, _ = await loop.create_datagram_endpoint(
