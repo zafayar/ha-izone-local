@@ -77,7 +77,7 @@
     "zone_open_close_only": {
       "message": "{zone} has no temperature control, so it can only be open or close"
     },
-    "unknown_zone": { "message": "No zone '{zone}'; the zones are {zones}" },
+    "unknown_zone": { "message": "No zone is called {zone}; the zones are {zones}" },
     "favourite_not_kept": {
       "message": "Favourite {favourite} didn't keep the change to {changes} (last error: {error})"
     }
