@@ -2,17 +2,28 @@
 
 from __future__ import annotations
 
+import asyncio
 import logging
 import re
+from collections.abc import Awaitable, Callable
 from typing import Any
 
+import voluptuous as vol
 from homeassistant.components.scene import Scene
 from homeassistant.core import HomeAssistant
-from homeassistant.exceptions import HomeAssistantError
+from homeassistant.exceptions import HomeAssistantError, ServiceValidationError
+from homeassistant.helpers import entity_platform
 from homeassistant.helpers.entity_platform import AddConfigEntryEntitiesCallback
 
 from . import const as c
-from .api import FAVOURITE_COUNT, IZoneError, clean_name, from_centi
+from .api import (
+    FAVOURITE_COUNT,
+    FAVOURITE_ZONE_SLOTS,
+    IZoneError,
+    clean_name,
+    from_centi,
+    to_centi,
+)
 from .coordinator import IZoneConfigEntry, IZoneCoordinator
 from .entity import IZoneEntity
 
@@ -24,6 +35,27 @@ DEFAULT_NAME = re.compile(r"Favourite \d")
 MODE_NAMES = {1: "cool", 2: "heat", 3: "vent", 4: "dry", 5: "auto"}
 FAN_NAMES = {1: "low", 2: "medium", 3: "high", 4: "auto", 5: "top"}
 ZONE_MODE_NAMES = {1: "open", 2: "close", 3: "auto"}
+
+# izone_local.update_favourite. "unchanged" (0) is how a favourite leaves the
+# AC's mode or fan alone, as favourites made in the app usually do.
+SERVICE_UPDATE_FAVOURITE = "update_favourite"
+UNCHANGED = "unchanged"
+ZONE_MODE_CHOICES = {name: mode for mode, name in ZONE_MODE_NAMES.items()}
+FAN_CHOICES = {UNCHANGED: 0} | {name: fan for fan, name in FAN_NAMES.items()}
+MODE_CHOICES = {UNCHANGED: 0} | {name: mode for mode, name in MODE_NAMES.items()}
+UPDATE_FAVOURITE_SCHEMA = {
+    vol.Optional("zone"): vol.Coerce(str),
+    vol.Optional("zone_mode"): vol.In(list(ZONE_MODE_CHOICES)),
+    vol.Optional("temperature"): vol.All(
+        vol.Coerce(float), vol.Range(min=c.MIN_TEMP, max=c.MAX_TEMP)
+    ),
+    vol.Optional("fan"): vol.In(list(FAN_CHOICES)),
+    vol.Optional("mode"): vol.In(list(MODE_CHOICES)),
+}
+
+# One edit: what it changes (for messages), how to send it, and whether a
+# favourite as read back shows it.
+type _Edit = tuple[str, Callable[[], Awaitable[None]], Callable[[dict], bool]]
 
 
 async def async_setup_entry(
@@ -44,6 +76,16 @@ async def async_setup_entry(
         if clean_name(favourite.get("Name")):
             scenes.append(IZoneFavouriteScene(coordinator, index, favourite))
     async_add_entities(scenes)
+
+    entity_platform.async_get_current_platform().async_register_entity_service(
+        SERVICE_UPDATE_FAVOURITE, UPDATE_FAVOURITE_SCHEMA, "async_update_favourite"
+    )
+
+
+def _stored_zone(favourite: dict[str, Any], index: int) -> dict[str, Any]:
+    zones = favourite.get("Zones") or []
+    zone = zones[index] if index < len(zones) else {}
+    return {"Mode": zone.get("Mode"), "Setpoint": zone.get("Setpoint")}
 
 
 class IZoneFavouriteScene(IZoneEntity, Scene):
@@ -79,11 +121,11 @@ class IZoneFavouriteScene(IZoneEntity, Scene):
             if mode == c.ZONE_MODE_AUTO:
                 zones[name] = f"auto {from_centi(targets[index].get('Setpoint'))}"
             else:
-                zones[name] = ZONE_MODE_NAMES.get(mode, "unchanged")
+                zones[name] = ZONE_MODE_NAMES.get(mode, UNCHANGED)
         return {
             "favourite_number": self.index + 1,
-            "mode": MODE_NAMES.get(favourite.get("Mode"), "unchanged"),
-            "fan": FAN_NAMES.get(favourite.get("Fan"), "unchanged"),
+            "mode": MODE_NAMES.get(favourite.get("Mode"), UNCHANGED),
+            "fan": FAN_NAMES.get(favourite.get("Fan"), UNCHANGED),
             "zones": zones,
         }
 
@@ -106,3 +148,156 @@ class IZoneFavouriteScene(IZoneEntity, Scene):
         # hold the caller: return once it's accepted, and follow through in
         # the background (the entities show the progress).
         await self._apply(changes, prelude=prelude, wait=False)
+
+    # Editing (izone_local.update_favourite) -------------------------------
+
+    async def async_update_favourite(
+        self,
+        zone: str | None = None,
+        zone_mode: str | None = None,
+        temperature: float | None = None,
+        fan: str | None = None,
+        mode: str | None = None,
+    ) -> None:
+        """Change what this favourite stores: one zone's mode and setpoint,
+        the fan and/or the AC mode.
+
+        It's saved on the controller, so the app and wall controller see it
+        too; nothing is applied until the favourite is next run. The replies
+        to these commands aren't reliable, so each edit is judged by reading
+        the favourite back, and what didn't stick is sent again.
+        """
+        if zone is None and (zone_mode is not None or temperature is not None):
+            raise ServiceValidationError("zone_mode and temperature need a zone")
+        if zone is not None and zone_mode is None and temperature is None:
+            raise ServiceValidationError(f"Give {zone} a zone_mode and/or temperature")
+        if zone is None and fan is None and mode is None:
+            raise ServiceValidationError("Nothing to change")
+
+        client = self.coordinator.client
+        try:
+            current = await client.get_favourite(self.index)
+        except IZoneError as err:
+            raise HomeAssistantError(f"Can't read the favourite: {err}") from err
+
+        edits: list[_Edit] = []
+        if zone is not None:
+            index, zones = self._zone_edit(current, zone, zone_mode, temperature)
+            edits.append(
+                (
+                    clean_name(self.coordinator.data.zones[index].get("Name")) or zone,
+                    lambda: client.set_favourite_zones(self.index, zones),
+                    lambda f: _stored_zone(f, index) == zones[index],
+                )
+            )
+        if fan is not None:
+            fan_value = FAN_CHOICES[fan]
+            speeds = c.fan_speeds(self.coordinator.data.system)
+            if fan_value and fan_value not in speeds:
+                raise ServiceValidationError(
+                    "This unit's fan speeds are "
+                    + ", ".join(FAN_NAMES[speed] for speed in speeds)
+                )
+            edits.append(
+                (
+                    "fan",
+                    lambda: client.set_favourite_fan(self.index, fan_value),
+                    lambda f: f.get("Fan") == fan_value,
+                )
+            )
+        if mode is not None:
+            mode_value = MODE_CHOICES[mode]
+            edits.append(
+                (
+                    "mode",
+                    lambda: client.set_favourite_mode(self.index, mode_value),
+                    lambda f: f.get("Mode") == mode_value,
+                )
+            )
+        await self._write(current, edits)
+
+    def _zone_edit(
+        self,
+        favourite: dict[str, Any],
+        zone: str,
+        zone_mode: str | None,
+        temperature: float | None,
+    ) -> tuple[int, list[dict[str, int]]]:
+        """The zone's index, and all 14 zones with that one changed: the
+        command replaces every zone, so the others are sent as stored."""
+        index = self._zone_index(zone)
+        data = self.coordinator.data.zones[index]
+        name = clean_name(data.get("Name")) or zone
+        if data.get("Bypass") or data.get("ZoneType") == c.ZONE_TYPE_CONSTANT:
+            raise ServiceValidationError(
+                f"{name} is run by the system itself, so a favourite doesn't set it"
+            )
+        zones = []
+        for slot in range(FAVOURITE_ZONE_SLOTS):
+            stored = _stored_zone(favourite, slot)
+            zones.append(
+                {
+                    "Mode": stored["Mode"] or c.ZONE_MODE_CLOSE,
+                    "Setpoint": stored["Setpoint"] or to_centi(23),
+                }
+            )
+        if zone_mode is not None:
+            new_mode = ZONE_MODE_CHOICES[zone_mode]
+        elif temperature is not None:
+            new_mode = c.ZONE_MODE_AUTO  # as on a zone: a temperature means auto
+        else:
+            new_mode = zones[index]["Mode"]
+        if new_mode == c.ZONE_MODE_AUTO and data.get("ZoneType") != c.ZONE_TYPE_AUTO:
+            raise ServiceValidationError(
+                f"{name} has no temperature control, so it can only be open or close"
+            )
+        zones[index] = {
+            "Mode": new_mode,
+            "Setpoint": (
+                zones[index]["Setpoint"] if temperature is None else to_centi(temperature)
+            ),
+        }
+        return index, zones
+
+    def _zone_index(self, zone: str) -> int:
+        """A zone's index, from its name (any case) or its number (1 = first)."""
+        zones = self.coordinator.data.zones
+        wanted = zone.strip()
+        for index, data in zones.items():
+            if clean_name(data.get("Name")).casefold() == wanted.casefold():
+                return index
+        if wanted.isdigit() and int(wanted) - 1 in zones:
+            return int(wanted) - 1
+        names = ", ".join(c.zone_name(data, i) for i, data in zones.items())
+        raise ServiceValidationError(f"No zone '{zone}'; the zones are {names}")
+
+    async def _write(self, current: dict[str, Any], edits: list[_Edit]) -> None:
+        client = self.coordinator.client
+        pending = [edit for edit in edits if not edit[2](current)]
+        last_error: IZoneError | None = None
+        for _ in range(c.FAVOURITE_EDIT_ATTEMPTS):
+            if not pending:
+                break
+            for _what, send, _kept in pending:
+                try:
+                    await send()
+                except IZoneError as err:
+                    _LOGGER.debug("%s: %s (checking the read-back)", self._attr_name, err)
+                    last_error = err
+                await asyncio.sleep(c.FAVOURITE_EDIT_GAP)
+            try:
+                current = await client.get_favourite(self.index)
+            except IZoneError as err:
+                last_error = err
+                continue
+            self._favourite = current
+            pending = [edit for edit in pending if not edit[2](current)]
+        self.async_write_ha_state()
+        if pending:
+            detail = f" (last error: {last_error})" if last_error else ""
+            raise HomeAssistantError(
+                f"Favourite {self._attr_name} didn't keep the change to "
+                + ", ".join(what for what, _send, _kept in pending)
+                + detail
+            )
+        _LOGGER.info("Favourite %s updated: %s", self._attr_name, [e[0] for e in edits])

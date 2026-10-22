@@ -49,6 +49,7 @@ QUERY_FIRMWARE = 6
 
 # Favourites (saved AC + zone setups, "schedules" in the API) on the controller.
 FAVOURITE_COUNT = 9
+FAVOURITE_ZONE_SLOTS = 14  # a favourite always carries 14 zones
 
 
 class IZoneError(Exception):
@@ -282,6 +283,22 @@ class IZoneClient:
         over the next ~5 s, but can leave a zone unchanged for a minute.
         """
         await self.command("FavouriteSet", index + 1)
+
+    # Editing a favourite (0-8). Measured: each is kept with a 2 s gap; others
+    # have seen the controller answer an edit sent sooner with {ERROR}, and
+    # {ERROR} to edits it did keep, so the caller reads the favourite back.
+
+    async def set_favourite_zones(self, index: int, zones: list[dict[str, int]]) -> None:
+        """Replace all 14 zones' {Mode, Setpoint} ("Set Schedule Zone Settings")."""
+        await self.command("SchedZones", {"Index": index, "Zones": zones})
+
+    async def set_favourite_fan(self, index: int, fan: int) -> None:
+        """The fan speed the favourite sets; 0 leaves the fan alone."""
+        await self.command("SchedAcFan", {"Index": index, "Fan": fan})
+
+    async def set_favourite_mode(self, index: int, mode: int) -> None:
+        """The AC mode the favourite sets; 0 leaves the mode alone."""
+        await self.command("SchedAcMode", {"Index": index, "Mode": mode})
 
     def command_ready_in(self) -> float:
         """Seconds until the next command may be sent (0 if now)."""

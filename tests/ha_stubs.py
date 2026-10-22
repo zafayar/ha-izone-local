@@ -45,6 +45,10 @@ class Entity:
     entity_description = None
 
     _attr_icon = None
+    state_writes = 0
+
+    def async_write_ha_state(self):
+        self.state_writes += 1
 
     @property
     def unique_id(self):
@@ -256,7 +260,19 @@ mod("homeassistant.config_entries", ConfigEntry=ConfigEntry, ConfigFlow=object, 
     ConfigFlowResult=dict)
 mod("homeassistant.helpers")
 mod("homeassistant.helpers.device_registry", DeviceInfo=dict)
-mod("homeassistant.helpers.entity_platform", AddConfigEntryEntitiesCallback=object)
+class EntityPlatform:
+    """Records the entity services a platform registers."""
+
+    def __init__(self):
+        self.services = {}
+
+    def async_register_entity_service(self, name, schema, method):
+        self.services[name] = (schema, method)
+
+
+platform = EntityPlatform()
+mod("homeassistant.helpers.entity_platform", AddConfigEntryEntitiesCallback=object,
+    async_get_current_platform=lambda: platform)
 mod("homeassistant.helpers.update_coordinator", DataUpdateCoordinator=DataUpdateCoordinator,
     CoordinatorEntity=CoordinatorEntity, UpdateFailed=UpdateFailed)
 mod("homeassistant.helpers.aiohttp_client", async_get_clientsession=None)

@@ -137,6 +137,28 @@ If the favourite needs a zone whose sensor is out, the controller refuses the
 whole favourite. The integration then applies it zone by zone instead, and
 that zone waits for its sensor.
 
+To change what a favourite stores, use the **iZone Local: Update favourite**
+action (`izone_local.update_favourite`) on its scene. It changes one zone
+(by name or number) and/or the fan and AC mode; `unchanged` makes the
+favourite leave the fan or mode alone. The change is saved on the
+controller, so the app and wall controller see it too, and nothing happens
+until the favourite is next run:
+
+```yaml
+action: izone_local.update_favourite
+target:
+  entity_id: scene.evening
+data:
+  zone: Master
+  temperature: 21.5   # a temperature alone sets the zone to auto
+  fan: unchanged
+  mode: heat
+```
+
+The controller's replies to these edits aren't reliable, so each one is
+checked by reading the favourite back, and sent again (2 s apart) if it
+didn't stick.
+
 ### Bridge health and diagnostics
 
 The **Bridge problem** binary sensor turns on after 3 failures within 5
@@ -242,7 +264,7 @@ recognises the bridge by its ID and updates the existing entry.
 
 ## Not yet supported
 
-Schedules (timed favourites), editing favourites, split and VRF systems,
+Schedules (timed favourites), renaming favourites, split and VRF systems,
 iLight, iDrate and iPower.
 
 The sleep timer is left out on purpose: on a real controller, setting it
@@ -296,7 +318,8 @@ logger:
 ## Development
 
 The tests run against a fake bridge, with small stand-ins for the parts of
-Home Assistant the integration uses, so all they need is `aiohttp`:
+Home Assistant the integration uses, so all they need is `aiohttp` and
+`voluptuous`:
 
 ```bash
 python -m unittest discover -s tests -v

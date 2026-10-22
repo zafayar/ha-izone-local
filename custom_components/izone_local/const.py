@@ -31,6 +31,10 @@ SENSOR_WAIT = 12 * 3600
 # and ignores separate zone commands meanwhile (measured). Follow-ups for a
 # favourite wait this long.
 FAVOURITE_SETTLE = 60
+# Editing a favourite: the gap after each edit command, and how many rounds
+# of sending what the read-back doesn't show yet.
+FAVOURITE_EDIT_GAP = 2.0
+FAVOURITE_EDIT_ATTEMPTS = 3
 
 # Health: the "bridge problem" sensor turns on after this many failures (a
 # change that couldn't be applied, or a failed read) within the window.

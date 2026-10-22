@@ -28,6 +28,51 @@
       }
     }
   },
+  "services": {
+    "update_favourite": {
+      "name": "Update favourite",
+      "description": "Changes what an iZone favourite stores: one zone's mode and temperature, the fan, and/or the AC mode. It's saved on the controller, so the iZone app and wall controller see it too. Nothing changes until the favourite is next run.",
+      "fields": {
+        "zone": {
+          "name": "Zone",
+          "description": "The zone to change, by name (any case) or number (1 is the first zone)."
+        },
+        "zone_mode": {
+          "name": "Zone mode",
+          "description": "What the favourite does to the zone. Leave out to keep what it stores; giving only a temperature sets auto."
+        },
+        "temperature": {
+          "name": "Temperature",
+          "description": "The zone's temperature in auto, 15-30 °C in 0.5° steps."
+        },
+        "fan": {
+          "name": "Fan",
+          "description": "The fan speed the favourite sets, or unchanged to leave the fan alone."
+        },
+        "mode": {
+          "name": "AC mode",
+          "description": "The AC mode the favourite sets, or unchanged to leave the mode alone."
+        }
+      }
+    }
+  },
+  "selector": {
+    "zone_mode": {
+      "options": { "open": "Open", "close": "Close", "auto": "Auto (temperature control)" }
+    },
+    "fan": {
+      "options": {
+        "unchanged": "Unchanged", "low": "Low", "medium": "Medium", "high": "High",
+        "auto": "Auto", "top": "Top"
+      }
+    },
+    "mode": {
+      "options": {
+        "unchanged": "Unchanged", "cool": "Cool", "heat": "Heat", "vent": "Vent",
+        "dry": "Dry", "auto": "Auto"
+      }
+    }
+  },
   "entity": {
     "binary_sensor": {
       "filter_warning": { "name": "Filter warning" },
