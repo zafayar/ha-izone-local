@@ -6,7 +6,7 @@ import asyncio
 import logging
 import time
 from collections import deque
-from collections.abc import Awaitable, Callable, Coroutine
+from collections.abc import Awaitable, Callable, Coroutine, Iterable
 from dataclasses import dataclass, field
 from typing import Any
 
@@ -26,6 +26,10 @@ type IZoneConfigEntry = ConfigEntry[IZoneCoordinator]
 type PendingKey = tuple[int | None, str]
 
 _UNSEEN = object()  # a want's last_seen before the first sync after the request
+
+
+class _ZeroedReply(IZoneError):
+    """The bridge answered with placeholder data (see const.zeroed_reply)."""
 
 
 @dataclass
@@ -103,6 +107,7 @@ class IZoneCoordinator(DataUpdateCoordinator[IZoneData]):
         self._failed: dict[PendingKey, float] = {}  # key -> show "failed" until
         self._loop_task: asyncio.Task | None = None
         self._failures: deque[float] = deque(maxlen=64)  # monotonic times
+        self._zeroed_since: float | None = None  # first of a run of zeroed replies
 
     async def _async_update_data(self) -> IZoneData:
         try:
@@ -110,6 +115,9 @@ class IZoneCoordinator(DataUpdateCoordinator[IZoneData]):
             zones: dict[int, dict[str, Any]] = {}
             for index in range(int(system.get("NoOfZones", 0))):
                 zones[index] = await self.client.get_zone(index)
+            self._check_reply(system, zones.values())
+        except _ZeroedReply as err:
+            return self._keep_last_data(err)
         except IZoneError as err:
             self._failures.append(time.monotonic())
             raise UpdateFailed(str(err)) from err
@@ -117,6 +125,28 @@ class IZoneCoordinator(DataUpdateCoordinator[IZoneData]):
         self._settle(data)
         self._start_loop()  # e.g. a zone's sensor came back
         return data
+
+    def _check_reply(self, system: dict[str, Any], zones: Iterable[dict]) -> None:
+        """Raise _ZeroedReply for placeholder data, so it's never compared
+        with the desired state (a zeroed zone would look like a change made
+        elsewhere, and the AC like it was turned off)."""
+        if c.zeroed_reply(system, zones):
+            raise _ZeroedReply("Bridge answered with zeroed data")
+        self._zeroed_since = None
+
+    def _keep_last_data(self, err: _ZeroedReply) -> IZoneData:
+        """Ride out zeroed replies with the last good state, for ZEROED_GRACE."""
+        now = time.monotonic()
+        if self._zeroed_since is None:
+            self._zeroed_since = now
+            _LOGGER.debug("%s; keeping the last state", err)
+        if self.data is None or now - self._zeroed_since > c.ZEROED_GRACE:
+            self._failures.append(now)
+            raise UpdateFailed(
+                f"{err} for {round(now - self._zeroed_since)} s; the controller "
+                "may not be talking to the bridge"
+            ) from err
+        return self.data
 
     # Desired state -------------------------------------------------------
 
@@ -311,7 +341,8 @@ class IZoneCoordinator(DataUpdateCoordinator[IZoneData]):
                     await self._sync()
                 except IZoneError as err:
                     _LOGGER.debug("Sync failed, will retry: %s", err)
-                    self._failures.append(time.monotonic())
+                    if not isinstance(err, _ZeroedReply):
+                        self._failures.append(time.monotonic())
                     self._settle(None)  # still let deadlines expire
                 if not self._has_work():
                     break
@@ -338,6 +369,7 @@ class IZoneCoordinator(DataUpdateCoordinator[IZoneData]):
         data = IZoneData(system=system, zones=dict(self.data.zones))
         for index in sorted(zones):
             data.zones[index] = await self.client.get_zone(index)
+        self._check_reply(system, (data.zones[i] for i in zones))
         self._settle(data)
         self.async_set_updated_data(data)
 

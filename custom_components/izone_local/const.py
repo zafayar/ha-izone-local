@@ -1,5 +1,6 @@
 """Constants for the iZone Local integration."""
 
+from collections.abc import Iterable
 from datetime import timedelta
 
 from .api import clean_name
@@ -31,6 +32,12 @@ FAVOURITE_SETTLE = 60
 # change that couldn't be applied, or a failed read) within the window.
 FAILURE_WINDOW = 300
 FAILURE_THRESHOLD = 3
+
+# Now and then the bridge answers with every live field zeroed while the unit
+# is running (see zeroed_reply). The last good state is kept for this long;
+# after that the controller has probably stopped talking to the bridge, and
+# the update fails.
+ZEROED_GRACE = 300
 
 # Progress shown in each entity's "status" attribute, with its icon.
 STATUS_READY = "ready"
@@ -108,6 +115,19 @@ def zone_is_on(zone: dict) -> bool:
         not zone.get("Bypass")
         and zone.get("Mode") in ZONE_MODES_ON
         and not sensor_faulted(zone)
+    )
+
+
+def zeroed_reply(system: dict, zones: Iterable[dict] = ()) -> bool:
+    """Whether the bridge answered with placeholder data instead of the real state.
+
+    Seen in Oct 2026 (reported for andrewgould/izone-v2): HTTP 200 with SysOn,
+    SysMode, SysFan, Setpoint and Temp all 0 while the unit was running. 0 is
+    the "not available" member of SysMode_e, SysFan_e and ZoneMode_e, never a
+    real setting.
+    """
+    return (system.get("SysMode") == 0 and system.get("SysFan") == 0) or any(
+        zone.get("Mode") == 0 for zone in zones
     )
 
 # CtrlZone value meaning "the unit's own setpoint is in control"
