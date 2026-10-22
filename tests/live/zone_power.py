@@ -11,13 +11,12 @@ import asyncio
 import sys
 import time
 
-import ha_stubs  # noqa: F401
 import aiohttp
-
-from izone_local import climate  # noqa: E402
-from izone_local.api import IZoneClient  # noqa: E402
-from izone_local.coordinator import IZoneCoordinator  # noqa: E402
-from ha_stubs import ConfigEntry  # noqa: E402
+import ha_stubs  # noqa: F401
+from ha_stubs import ConfigEntry
+from izone_local import climate
+from izone_local.api import IZoneClient
+from izone_local.coordinator import IZoneCoordinator
 
 fails = []
 
@@ -68,7 +67,7 @@ async def main():
             if co.data.system["SysOn"]:
                 await ac.async_turn_off()
 
-            first, log, total = await timed(
+            first, _, _ = await timed(
                 "Master on (AC off)", zone["Master"].async_turn_on(), ac, zone, zone["Master"])
             check("Master on: shown at once as auto with the AC on",
                   first["Master"] == "auto" and first["AC"] != "off", first)
@@ -76,17 +75,17 @@ async def main():
                   co.data.system["SysOn"] == 1 and zone["Master"].status == "ready"
                   and not co._wants, (co._wants, zone["Master"].status))
 
-            first, log, total = await timed(
+            first, _, _ = await timed(
                 "Upstairs on (AC on)", zone["Upstairs"].async_turn_on(), ac, zone, zone["Upstairs"])
             check("Upstairs on: confirmed", str(zone["Upstairs"].hvac_mode) == "auto"
                   and zone["Upstairs"].status == "ready", zone["Upstairs"].status)
 
-            first, log, total = await timed(
+            first, _, _ = await timed(
                 "Master off (Upstairs still on)", zone["Master"].async_turn_off(), ac, zone,
                 zone["Master"])
             check("Master off: the AC stays on", co.data.system["SysOn"] == 1, co.data.system["SysOn"])
 
-            first, log, total = await timed(
+            first, _, _ = await timed(
                 "Upstairs off (last zone)", zone["Upstairs"].async_turn_off(), ac, zone,
                 zone["Upstairs"])
             check("Last zone off: shown at once with the AC off", first["AC"] == "off", first)

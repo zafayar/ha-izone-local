@@ -401,9 +401,14 @@ class IZoneCoordinator(DataUpdateCoordinator[IZoneData]):
         # changes still on their way): a zone opened from the wall controller
         # in the meantime keeps it on.
         off = self._wants.get((None, "SysOn"))
-        if off and off.value == 0 and off.unless_zones_on and not off.sent_at:
-            if any(c.zone_is_on(self._view(i, z)) for i, z in data.zones.items()):
-                del self._wants[(None, "SysOn")]
+        if (
+            off
+            and off.value == 0
+            and off.unless_zones_on
+            and not off.sent_at
+            and any(c.zone_is_on(self._view(i, z)) for i, z in data.zones.items())
+        ):
+            del self._wants[(None, "SysOn")]
         active = {k for k, w in self._wants.items() if not w.waiting_for_sensor}
         for request in self._requests:
             if not request.done.done() and not request.keys & active:
@@ -489,8 +494,8 @@ class IZoneCoordinator(DataUpdateCoordinator[IZoneData]):
 
     @staticmethod
     def _order(key: PendingKey, value: Any) -> int:
-        index, name = key
-        if name == "Mode" and value == c.ZONE_MODE_CLOSE or name == "SysMode":
+        _, name = key
+        if (name == "Mode" and value == c.ZONE_MODE_CLOSE) or name == "SysMode":
             return 0  # close zones and set the mode before powering on
         if name == "Mode":
             return 1

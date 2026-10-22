@@ -11,14 +11,14 @@ import asyncio
 import json
 import sys
 
-import ha_stubs  # noqa: F401
 import aiohttp
+import ha_stubs  # noqa: F401
 from aiohttp import web
-
-from izone_local import api, climate, const as c, number, sensor  # noqa: E402
-from izone_local.api import IZoneClient  # noqa: E402
-from izone_local.coordinator import IZoneCoordinator  # noqa: E402
-from ha_stubs import ConfigEntry, ServiceValidationError  # noqa: E402
+from ha_stubs import ConfigEntry, ServiceValidationError
+from izone_local import api, climate, number, sensor
+from izone_local import const as c
+from izone_local.api import IZoneClient
+from izone_local.coordinator import IZoneCoordinator
 
 api.COMMAND_GAP = 0.02
 c.CONFIRM_INTERVAL = 0.02

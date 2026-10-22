@@ -12,10 +12,9 @@ import socket
 import sys
 
 import ha_stubs  # noqa: F401
-
-from izone_local import api  # noqa: E402
-from izone_local.coordinator import IZoneCoordinator  # noqa: E402
-from ha_stubs import ConfigEntry  # noqa: E402
+from ha_stubs import ConfigEntry
+from izone_local import api
+from izone_local.coordinator import IZoneCoordinator
 
 fails = []
 

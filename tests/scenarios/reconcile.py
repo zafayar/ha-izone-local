@@ -7,14 +7,18 @@ _ROOT = pathlib.Path(__file__).resolve().parents[2]
 sys.path.insert(0, str(_ROOT / "tests"))
 sys.path.insert(0, str(_ROOT / "custom_components"))
 
-import asyncio, json, sys
-import ha_stubs  # noqa
+import asyncio
+import json
+import sys
+
 import aiohttp
+import ha_stubs  # noqa
 from aiohttp import web
-from izone_local import climate, api, const as c
+from ha_stubs import ConfigEntry, HomeAssistantError, HVACMode
+from izone_local import api, climate
+from izone_local import const as c
 from izone_local.api import IZoneClient
 from izone_local.coordinator import IZoneCoordinator
-from ha_stubs import ConfigEntry, HomeAssistantError, HVACMode
 
 api.COMMAND_GAP = 0.1
 c.CONFIRM_INTERVAL = 0.03

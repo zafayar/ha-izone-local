@@ -14,9 +14,8 @@ import socket
 import sys
 
 import aiohttp
+import api
 from aiohttp import web
-
-import api  # noqa: E402
 
 SYSTEM = {"SysOn": 1, "SysMode": 1, "SysFan": 2, "Setpoint": 2350, "Temp": 2410,
           "Supply": 1600, "CtrlZone": 15, "NoOfZones": 2, "ACError": " OK",

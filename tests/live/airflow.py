@@ -10,14 +10,14 @@ sys.path.insert(0, str(_ROOT / "custom_components"))
 import asyncio
 import sys
 
-import ha_stubs  # noqa: F401
 import aiohttp
+import ha_stubs  # noqa: F401
+from ha_stubs import ConfigEntry
+from izone_local import number
+from izone_local.api import IZoneClient
+from izone_local.coordinator import IZoneCoordinator
 
-from izone_local import number  # noqa: E402
-from izone_local.api import IZoneClient  # noqa: E402
-from izone_local.coordinator import IZoneCoordinator  # noqa: E402
-from ha_stubs import ConfigEntry  # noqa: E402
-from live.bridge_state import snap  # noqa: E402
+from live.bridge_state import snap
 
 fails = []
 

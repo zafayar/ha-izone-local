@@ -11,14 +11,14 @@ import asyncio
 import sys
 import time
 
-import ha_stubs  # noqa: F401
 import aiohttp
+import ha_stubs  # noqa: F401
+from ha_stubs import ConfigEntry
+from izone_local import climate, scene
+from izone_local.api import IZoneClient
+from izone_local.coordinator import IZoneCoordinator
 
-from izone_local import climate, scene  # noqa: E402
-from izone_local.api import IZoneClient  # noqa: E402
-from izone_local.coordinator import IZoneCoordinator  # noqa: E402
-from ha_stubs import ConfigEntry  # noqa: E402
-from live.bridge_state import restore, snap  # noqa: E402
+from live.bridge_state import restore, snap
 
 T0 = time.perf_counter()
 

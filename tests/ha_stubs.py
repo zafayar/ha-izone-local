@@ -8,9 +8,7 @@ import sys
 import types
 from dataclasses import dataclass
 from enum import IntFlag, StrEnum
-from typing import Any, Generic, TypeVar
-
-T = TypeVar("T")
+from typing import Any
 
 
 def mod(name, **attrs):
@@ -157,7 +155,7 @@ class Platform(StrEnum):
     SWITCH = "switch"
 
 
-class DataUpdateCoordinator(Generic[T]):
+class DataUpdateCoordinator[T]:
     def __init__(self, hass, logger, *, config_entry=None, name=None, update_interval=None):
         self.hass = hass
         self.config_entry = config_entry
@@ -181,7 +179,7 @@ class DataUpdateCoordinator(Generic[T]):
         self.async_update_listeners()
 
 
-class CoordinatorEntity(Entity, Generic[T]):
+class CoordinatorEntity[T](Entity):
     def __init__(self, coordinator):
         self.coordinator = coordinator
 
@@ -202,7 +200,7 @@ class ServiceValidationError(HomeAssistantError):
     pass
 
 
-class ConfigEntry(Generic[T]):
+class ConfigEntry[T]:
     def __init__(self, data):
         self.data = data
         self.runtime_data = None

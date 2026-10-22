@@ -11,18 +11,18 @@ _ROOT = pathlib.Path(__file__).resolve().parents[2]
 sys.path.insert(0, str(_ROOT / "tests"))
 sys.path.insert(0, str(_ROOT / "custom_components"))
 
-import asyncio  # noqa: E402
-import json  # noqa: E402
-import logging  # noqa: E402
+import asyncio
+import json
+import logging
 
-import ha_stubs  # noqa: E402, F401
-import aiohttp  # noqa: E402
-from aiohttp import web  # noqa: E402
-
-from izone_local import api, const as c  # noqa: E402
-from izone_local.api import IZoneClient  # noqa: E402
-from izone_local.coordinator import IZoneCoordinator  # noqa: E402
-from ha_stubs import ConfigEntry, UpdateFailed  # noqa: E402
+import aiohttp
+import ha_stubs  # noqa: F401
+from aiohttp import web
+from ha_stubs import ConfigEntry, UpdateFailed
+from izone_local import api
+from izone_local import const as c
+from izone_local.api import IZoneClient
+from izone_local.coordinator import IZoneCoordinator
 
 api.COMMAND_GAP = 0.05
 c.CONFIRM_INTERVAL = 0.03

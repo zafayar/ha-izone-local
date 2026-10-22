@@ -1,0 +1,17 @@
+# Tool settings only: the integration itself is installed by HACS from
+# custom_components/, not as a Python package.
+
+[tool.ruff]
+target-version = "py313"
+
+[tool.ruff.lint]
+select = ["E", "F", "W", "I", "UP", "B", "SIM", "RUF"]
+ignore = [
+    "E501",   # long lines: wrapped where it reads better, not to a fixed width
+    "RUF012", # `_attr_x = [...]` class attributes are the standard HA pattern
+]
+
+[tool.ruff.lint.per-file-ignores]
+# Scenario scripts put tests/ and custom_components/ on sys.path before
+# importing, and keep the fake bridge terse.
+"tests/**" = ["E401", "E402", "E701", "E702"]

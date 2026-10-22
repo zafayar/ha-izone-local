@@ -26,13 +26,15 @@ def _redact(data, keys):
 sys.modules["homeassistant.components.diagnostics"] = types.SimpleNamespace(
     async_redact_data=_redact)
 
-import aiohttp  # noqa: E402
-from aiohttp import web  # noqa: E402
+import contextlib
 
-from izone_local import api, binary_sensor, climate, const as c, diagnostics  # noqa: E402
-from izone_local.api import IZoneClient  # noqa: E402
-from izone_local.coordinator import IZoneCoordinator  # noqa: E402
-from ha_stubs import ConfigEntry, HomeAssistantError  # noqa: E402
+import aiohttp
+from aiohttp import web
+from ha_stubs import ConfigEntry, HomeAssistantError
+from izone_local import api, binary_sensor, climate, diagnostics
+from izone_local import const as c
+from izone_local.api import IZoneClient
+from izone_local.coordinator import IZoneCoordinator
 
 api.COMMAND_GAP = 0.01
 api.CONNECT_RETRY_DELAYS = (0.01, 0.01)
@@ -90,17 +92,15 @@ async def main():
         check("healthy: off", problem.is_on is False and problem.available)
 
         for fan in ("low", "medium"):
-            try:
+            with contextlib.suppress(HomeAssistantError):
                 await ac.async_set_fan_mode(fan)
-            except HomeAssistantError:
-                pass
         check("two failures: still off", not problem.is_on
               and problem.extra_state_attributes["recent_failures"] == 2,
               problem.extra_state_attributes)
         B["down"] = True
         try:
             await co.async_refresh()
-        except Exception:  # noqa: BLE001 - the stub doesn't catch like HA does
+        except Exception:
             co.last_update_success = False
         check("a failed read counts: on at 3", problem.is_on, co.recent_failures)
         check("stays available while the bridge is unreachable", problem.available)

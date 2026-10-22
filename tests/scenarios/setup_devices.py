@@ -11,14 +11,14 @@ _ROOT = pathlib.Path(__file__).resolve().parents[2]
 sys.path.insert(0, str(_ROOT / "tests"))
 sys.path.insert(0, str(_ROOT / "custom_components"))
 
-import asyncio  # noqa: E402
-import importlib  # noqa: E402
-import json  # noqa: E402
-from types import SimpleNamespace  # noqa: E402
+import asyncio
+import importlib
+import json
+from types import SimpleNamespace
 
-import ha_stubs  # noqa: E402, F401
-import aiohttp  # noqa: E402
-from aiohttp import web  # noqa: E402
+import aiohttp
+import ha_stubs
+from aiohttp import web
 
 fails = []
 
