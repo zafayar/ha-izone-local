@@ -49,7 +49,9 @@ async def async_setup_entry(hass: HomeAssistant, entry: IZoneConfigEntry) -> boo
         manufacturer=brand_name(system),
         model=unit_model(system),
         name=system_name(system),
+        sw_version=coordinator.hub_firmware,
     )
+    coordinator.ac_device_id = ac.id  # to show a firmware update
     await hass.config_entries.async_forward_entry_setups(entry, PLATFORMS)
     _link_zone_devices(registry, coordinator, ac.id)
     return True

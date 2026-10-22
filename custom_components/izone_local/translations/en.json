@@ -34,6 +34,7 @@
       "damper_position": { "name": "Damper position" },
       "run_hours": { "name": "Run hours" },
       "control_zone": { "name": "Control zone" },
+      "firmware": { "name": "Firmware {module}" },
       "sensor_battery": {
         "name": "Sensor battery",
         "state": { "full": "Full", "half": "Half", "empty": "Empty" }

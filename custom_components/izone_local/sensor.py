@@ -26,6 +26,7 @@ from .const import (
     CTRL_ZONE_UNIT,
     SENS_TYPE_NONE,
     SENS_TYPE_WIRELESS,
+    firmware_label,
     sensor_faulted,
     zone_name,
 )
@@ -132,6 +133,9 @@ async def async_setup_entry(
         IZoneSystemSensor(coordinator, desc) for desc in SYSTEM_SENSORS
     ]
     entities.append(IZoneControlZoneSensor(coordinator))
+    entities.extend(
+        IZoneFirmwareSensor(coordinator, module) for module in coordinator.firmware
+    )
     for index, zone in coordinator.data.zones.items():
         has_sensor = zone.get("SensType") != SENS_TYPE_NONE
         wireless = zone.get("SensType") == SENS_TYPE_WIRELESS
@@ -177,6 +181,28 @@ class IZoneControlZoneSensor(IZoneEntity, SensorEntity):
             return "unit"
         zone = self.coordinator.data.zones.get(index)
         return zone_name(zone, index) if zone is not None else None
+
+
+class IZoneFirmwareSensor(IZoneEntity, SensorEntity):
+    """Firmware version of one module (hub, wall controller, board).
+
+    Updates can only be installed from the iZone app; this shows what's
+    installed. Read every few hours.
+    """
+
+    _attr_translation_key = "firmware"
+    _attr_entity_category = EntityCategory.DIAGNOSTIC
+    _attr_icon = "mdi:chip"
+
+    def __init__(self, coordinator: IZoneCoordinator, module: str) -> None:
+        label, key = firmware_label(module)
+        super().__init__(coordinator, f"firmware_{key}")
+        self._module = module
+        self._attr_translation_placeholders = {"module": label}
+
+    @property
+    def native_value(self) -> str | None:
+        return self.coordinator.firmware.get(self._module)
 
 
 class IZoneZoneSensor(IZoneZoneEntity, SensorEntity):

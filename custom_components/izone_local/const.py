@@ -39,6 +39,11 @@ FAILURE_THRESHOLD = 3
 # the update fails.
 ZEROED_GRACE = 300
 
+# Firmware only changes when someone updates it from the iZone app, so it's
+# read at start-up and then rarely; a failed read is retried sooner.
+FIRMWARE_INTERVAL = 6 * 3600
+FIRMWARE_RETRY = 600
+
 # Progress shown in each entity's "status" attribute, with its icon.
 STATUS_READY = "ready"
 STATUS_QUEUED = "queued"
@@ -209,6 +214,16 @@ def brand_name(system: dict) -> str:
 def system_name(system: dict) -> str:
     """The name shown on the wall controller (Tag1), or the brand."""
     return clean_name(system.get("Tag1")) or brand_name(system)
+
+
+def firmware_label(module: str) -> tuple[str, str]:
+    """(name, unique-ID key) for a firmware module: the hub's model code
+    (e.g. COCB-2F5) differs between installations, so it's just "hub"."""
+    if module.startswith("COC"):
+        return "hub", "hub"
+    if module == "CR":
+        return "wall controller", "controller"
+    return module, module.lower()
 
 
 def unit_model(system: dict) -> str:

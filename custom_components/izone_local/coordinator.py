@@ -12,6 +12,7 @@ from typing import Any
 
 from homeassistant.config_entries import ConfigEntry
 from homeassistant.core import HomeAssistant
+from homeassistant.helpers import device_registry as dr
 from homeassistant.helpers.update_coordinator import DataUpdateCoordinator, UpdateFailed
 
 from . import const as c
@@ -108,6 +109,18 @@ class IZoneCoordinator(DataUpdateCoordinator[IZoneData]):
         self._loop_task: asyncio.Task | None = None
         self._failures: deque[float] = deque(maxlen=64)  # monotonic times
         self._zeroed_since: float | None = None  # first of a run of zeroed replies
+        # {module: version}, read every FIRMWARE_INTERVAL; empty until read.
+        self.firmware: dict[str, str] = {}
+        self._firmware_due = 0.0
+        self.ac_device_id: str | None = None  # set once the device exists
+
+    @property
+    def hub_firmware(self) -> str | None:
+        """The hub's firmware version, if known."""
+        for module, version in self.firmware.items():
+            if c.firmware_label(module)[1] == "hub":
+                return version
+        return None
 
     async def _async_update_data(self) -> IZoneData:
         try:
@@ -124,7 +137,30 @@ class IZoneCoordinator(DataUpdateCoordinator[IZoneData]):
         data = IZoneData(system=system, zones=zones)
         self._settle(data)
         self._start_loop()  # e.g. a zone's sensor came back
+        await self._refresh_firmware()
         return data
+
+    async def _refresh_firmware(self) -> None:
+        """Re-read the firmware list when it's due. Never fails the poll."""
+        now = time.monotonic()
+        if now < self._firmware_due:
+            return
+        try:
+            firmware = await self.client.get_firmware()
+        except IZoneError as err:
+            _LOGGER.debug("Firmware read failed, trying again later: %s", err)
+            self._firmware_due = now + c.FIRMWARE_RETRY
+            return
+        self._firmware_due = now + c.FIRMWARE_INTERVAL
+        if firmware == self.firmware:
+            return
+        if self.firmware:
+            _LOGGER.info("iZone firmware changed: %s -> %s", self.firmware, firmware)
+        self.firmware = firmware
+        if self.ac_device_id and self.hub_firmware:
+            dr.async_get(self.hass).async_update_device(
+                self.ac_device_id, sw_version=self.hub_firmware
+            )
 
     def _check_reply(self, system: dict[str, Any], zones: Iterable[dict]) -> None:
         """Raise _ZeroedReply for placeholder data, so it's never compared

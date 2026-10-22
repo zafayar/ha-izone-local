@@ -43,6 +43,9 @@ COMMAND_GAP = 1.0
 QUERY_SYSTEM = 1
 QUERY_ZONE = 2
 QUERY_SCHEDULE = 3
+# Not in the published spec; answered by the hub with its modules' firmware,
+# e.g. {"Fmw": "COCB-2F5 4.36 (<hub serial>),C225-1O9 3.80,CCTSL-4E9 2.38"}.
+QUERY_FIRMWARE = 6
 
 # Favourites (saved AC + zone setups, "schedules" in the API) on the controller.
 FAVOURITE_COUNT = 9
@@ -264,6 +267,14 @@ class IZoneClient:
             raise IZoneConnectionError(f"No favourite in reply: {data}")
         return favourite
 
+    async def get_firmware(self) -> dict[str, str]:
+        """{module: version} for the hub, wall controller and boards."""
+        data = await self.query(QUERY_FIRMWARE)
+        firmware = parse_firmware(data.get("Fmw"))
+        if not firmware:
+            raise IZoneConnectionError("No firmware list in reply")
+        return firmware
+
     async def run_favourite(self, index: int) -> None:
         """Apply a saved favourite (0-8) in one command ("FavouriteSet" 1-9).
 
@@ -343,6 +354,21 @@ class IZoneClient:
 def clean_name(value: Any) -> str:
     """A name without the firmware's padding (NUL and 0xFF bytes)."""
     return str(value or "").split("\x00", 1)[0].strip("\ufffd\xff \t\r\n")
+
+
+def parse_firmware(text: Any) -> dict[str, str]:
+    """Split a firmware list into {module: version}.
+
+    "COCB-2F5 4.36 (123456789),CR 3.23" -> {"COCB-2F5": "4.36", "CR": "3.23"}.
+    The hub's serial number in brackets is dropped, and anything that isn't
+    "MODULE VERSION" is skipped.
+    """
+    modules: dict[str, str] = {}
+    for part in clean_name(text).split(","):
+        words = re.sub(r"\(.*?\)", "", part).split()
+        if len(words) >= 2:
+            modules[words[0]] = words[1]
+    return modules
 
 
 def to_centi(celsius: float) -> int:

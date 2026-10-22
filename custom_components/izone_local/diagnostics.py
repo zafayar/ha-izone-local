@@ -32,6 +32,7 @@ async def async_get_config_entry_diagnostics(
         "system": async_redact_data(coordinator.data.system, TO_REDACT),
         "zones": coordinator.data.zones,
         "favourites": favourites,
+        "firmware": coordinator.firmware,  # without the hub's serial number
         "last_update_success": coordinator.last_update_success,
         "recent_failures": coordinator.recent_failures,
         "pending_changes": coordinator.pending_for_diagnostics(),
