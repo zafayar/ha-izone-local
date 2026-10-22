@@ -8,7 +8,6 @@ import re
 from collections.abc import Awaitable, Callable
 from typing import Any
 
-import voluptuous as vol
 from homeassistant.components.scene import Scene
 from homeassistant.core import HomeAssistant
 from homeassistant.exceptions import HomeAssistantError, ServiceValidationError
@@ -26,32 +25,27 @@ from .api import (
 )
 from .coordinator import IZoneConfigEntry, IZoneCoordinator
 from .entity import IZoneEntity
+from .services import (
+    FAN_CHOICES,
+    FAN_NAMES,
+    MODE_CHOICES,
+    MODE_NAMES,
+    REGISTER_ON_LOAD,
+    SERVICE_UPDATE_FAVOURITE,
+    UNCHANGED,
+    UPDATE_FAVOURITE_SCHEMA,
+    ZONE_MODE_CHOICES,
+    ZONE_MODE_NAMES,
+)
+
+# Each platform's updates are read by the coordinator, and commands are
+# queued by the client, so entities needn't be limited here.
+PARALLEL_UPDATES = 0
 
 _LOGGER = logging.getLogger(__name__)
 
 # The controller's names for slots nobody has set up.
 DEFAULT_NAME = re.compile(r"Favourite \d")
-
-MODE_NAMES = {1: "cool", 2: "heat", 3: "vent", 4: "dry", 5: "auto"}
-FAN_NAMES = {1: "low", 2: "medium", 3: "high", 4: "auto", 5: "top"}
-ZONE_MODE_NAMES = {1: "open", 2: "close", 3: "auto"}
-
-# izone_local.update_favourite. "unchanged" (0) is how a favourite leaves the
-# AC's mode or fan alone, as favourites made in the app usually do.
-SERVICE_UPDATE_FAVOURITE = "update_favourite"
-UNCHANGED = "unchanged"
-ZONE_MODE_CHOICES = {name: mode for mode, name in ZONE_MODE_NAMES.items()}
-FAN_CHOICES = {UNCHANGED: 0} | {name: fan for fan, name in FAN_NAMES.items()}
-MODE_CHOICES = {UNCHANGED: 0} | {name: mode for mode, name in MODE_NAMES.items()}
-UPDATE_FAVOURITE_SCHEMA = {
-    vol.Optional("zone"): vol.Coerce(str),
-    vol.Optional("zone_mode"): vol.In(list(ZONE_MODE_CHOICES)),
-    vol.Optional("temperature"): vol.All(
-        vol.Coerce(float), vol.Range(min=c.MIN_TEMP, max=c.MAX_TEMP)
-    ),
-    vol.Optional("fan"): vol.In(list(FAN_CHOICES)),
-    vol.Optional("mode"): vol.In(list(MODE_CHOICES)),
-}
 
 # One edit: what it changes (for messages), how to send it, and whether a
 # favourite as read back shows it.
@@ -77,9 +71,10 @@ async def async_setup_entry(
             scenes.append(IZoneFavouriteScene(coordinator, index, favourite))
     async_add_entities(scenes)
 
-    entity_platform.async_get_current_platform().async_register_entity_service(
-        SERVICE_UPDATE_FAVOURITE, UPDATE_FAVOURITE_SCHEMA, "async_update_favourite"
-    )
+    if not REGISTER_ON_LOAD:  # Home Assistant before 2025.10
+        entity_platform.async_get_current_platform().async_register_entity_service(
+            SERVICE_UPDATE_FAVOURITE, UPDATE_FAVOURITE_SCHEMA, "async_update_favourite"
+        )
 
 
 def _stored_zone(favourite: dict[str, Any], index: int) -> dict[str, Any]:

@@ -11,6 +11,10 @@ from homeassistant.helpers.entity_platform import AddConfigEntryEntitiesCallback
 from .coordinator import IZoneConfigEntry, IZoneCoordinator, PendingKey
 from .entity import IZoneEntity
 
+# Each platform's updates are read by the coordinator, and commands are
+# queued by the client, so entities needn't be limited here.
+PARALLEL_UPDATES = 0
+
 
 async def async_setup_entry(
     hass: HomeAssistant,

@@ -259,6 +259,11 @@ mod("homeassistant.exceptions", HomeAssistantError=HomeAssistantError,
 mod("homeassistant.config_entries", ConfigEntry=ConfigEntry, ConfigFlow=object, OptionsFlow=object,
     ConfigFlowResult=dict)
 mod("homeassistant.helpers")
+mod("homeassistant.helpers.config_validation", config_entry_only_config_schema=lambda domain: None)
+mod("homeassistant.helpers.typing", ConfigType=dict)
+# Without async_register_platform_entity_service, like Home Assistant before
+# 2025.10; a test can add it to check the newer path.
+mod("homeassistant.helpers.service")
 mod("homeassistant.helpers.device_registry", DeviceInfo=dict)
 class EntityPlatform:
     """Records the entity services a platform registers."""

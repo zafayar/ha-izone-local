@@ -19,6 +19,10 @@ from .const import SENS_TYPE_NONE
 from .coordinator import IZoneConfigEntry, IZoneCoordinator
 from .entity import IZoneEntity, IZoneZoneEntity
 
+# Each platform's updates are read by the coordinator, and commands are
+# queued by the client, so entities needn't be limited here.
+PARALLEL_UPDATES = 0
+
 
 @dataclass(frozen=True, kw_only=True)
 class IZoneBinaryDescription(BinarySensorEntityDescription):

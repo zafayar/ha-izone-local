@@ -9,6 +9,7 @@ sys.path.insert(0, str(_ROOT / "custom_components"))
 
 import asyncio
 import copy
+import importlib
 import json
 
 import aiohttp
@@ -191,6 +192,20 @@ async def main():
             cmds.clear()
             result = await refused(coro, words)
             check(f"refused: {what}", result is True and not cmds, (result, cmds))
+
+    # Home Assistant 2025.10+: registered once when the integration loads.
+    registered = []
+    service_helper = sys.modules["homeassistant.helpers.service"]
+    service_helper.async_register_platform_entity_service = (
+        lambda hass, domain, name, **kw: registered.append((domain, name, kw)))
+    services = importlib.reload(importlib.import_module("izone_local.services"))
+    services.async_setup_services(None)
+    check("2025.10+: registered on load for the scenes",
+          services.REGISTER_ON_LOAD and len(registered) == 1
+          and registered[0][:2] == ("izone_local", "update_favourite")
+          and registered[0][2]["entity_domain"] == "scene"
+          and registered[0][2]["func"] == "async_update_favourite", registered)
+    del service_helper.async_register_platform_entity_service
     await runner.cleanup()
     print("\nALL PASSED" if not fails else f"\nFAILED: {fails}")
     sys.exit(1 if fails else 0)

@@ -3,12 +3,18 @@
     "step": {
       "pick": {
         "title": "Choose your iZone bridge",
-        "data": { "bridge": "Bridge" }
+        "data": { "bridge": "Bridge" },
+        "data_description": {
+          "bridge": "Bridges that support the v2 local API, found on your network. Choose \"Enter an IP address\" if yours isn't listed."
+        }
       },
       "manual": {
         "title": "Connect to an iZone bridge",
         "description": "No bridge was found automatically. Enter the bridge's IP address (a DHCP reservation is recommended).",
-        "data": { "host": "IP address" }
+        "data": { "host": "IP address" },
+        "data_description": {
+          "host": "The bridge's IP address on your network, e.g. 192.168.1.50. Your router lists it; a DHCP reservation keeps it from changing."
+        }
       }
     },
     "error": {
@@ -24,7 +30,10 @@
       "init": {
         "title": "iZone options",
         "description": "Notifications appear in Home Assistant when the controller says the filter is due a clean, and when a module's firmware changes.",
-        "data": { "notifications": "Show notifications" }
+        "data": { "notifications": "Show notifications" },
+        "data_description": {
+          "notifications": "Notify when the filter is due a clean and when firmware changes."
+        }
       }
     }
   },

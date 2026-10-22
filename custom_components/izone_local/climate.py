@@ -25,6 +25,10 @@ from .api import from_centi, to_centi
 from .coordinator import IZoneConfigEntry, IZoneCoordinator, PendingKey
 from .entity import IZoneEntity, IZoneZoneEntity
 
+# Each platform's updates are read by the coordinator, and commands are
+# queued by the client, so entities needn't be limited here.
+PARALLEL_UPDATES = 0
+
 _LOGGER = logging.getLogger(__name__)
 
 FAN_TOP = "top"
