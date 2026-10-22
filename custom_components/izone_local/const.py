@@ -73,6 +73,23 @@ FAN_TOP = 5
 FAN_QUIET = 6  # shown if the unit reports it; not offered
 FAN_TURBO = 7
 
+# FanAutoType_e -> the speeds the unit's fan has (read the same way as
+# python-izone). Without FanAutoEn there's no auto speed.
+_FAN_SPEEDS = {
+    0: (FAN_LOW, FAN_HIGH, FAN_AUTO),  # 2-speed
+    1: (FAN_LOW, FAN_MED, FAN_HIGH, FAN_AUTO),  # 3-speed
+    2: (FAN_LOW, FAN_MED, FAN_HIGH, FAN_AUTO),  # variable speed
+    3: (FAN_LOW, FAN_MED, FAN_HIGH, FAN_AUTO, FAN_TOP),  # 4-speed
+}
+
+
+def fan_speeds(system: dict) -> list[int]:
+    """The SysFan values the unit offers, from FanAutoEn and FanAutoType."""
+    if "FanAutoEn" in system and not system["FanAutoEn"]:
+        return [FAN_LOW, FAN_MED, FAN_HIGH]
+    default = (FAN_LOW, FAN_MED, FAN_HIGH, FAN_AUTO, FAN_TOP)  # unknown: all
+    return list(_FAN_SPEEDS.get(system.get("FanAutoType"), default))
+
 # ZoneMode_e
 ZONE_MODE_OPEN = 1
 ZONE_MODE_CLOSE = 2

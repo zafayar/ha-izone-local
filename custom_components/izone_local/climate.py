@@ -45,7 +45,6 @@ SYS_FAN_TO_HA = {
     c.FAN_AUTO: FAN_AUTO,
     c.FAN_TOP: FAN_TOP,
 }
-FAN_MODES = list(SYS_FAN_TO_HA.values())
 # Speeds some units report but that aren't offered.
 SYS_FAN_TO_HA |= {c.FAN_QUIET: "quiet", c.FAN_TURBO: "turbo"}
 HA_TO_SYS_FAN = {v: k for k, v in SYS_FAN_TO_HA.items()}
@@ -114,7 +113,6 @@ class IZoneSystemClimate(_TemperatureLimits, IZoneEntity, ClimateEntity):
     _attr_temperature_unit = UnitOfTemperature.CELSIUS
     _attr_target_temperature_step = c.TEMP_STEP
     _attr_hvac_modes = [HVACMode.OFF, *SYS_MODE_TO_HVAC.values()]
-    _attr_fan_modes = FAN_MODES
     _attr_supported_features = (
         ClimateEntityFeature.TARGET_TEMPERATURE
         | ClimateEntityFeature.FAN_MODE
@@ -142,6 +140,11 @@ class IZoneSystemClimate(_TemperatureLimits, IZoneEntity, ClimateEntity):
     @property
     def fan_mode(self) -> str | None:
         return SYS_FAN_TO_HA.get(self.system.get("SysFan"))
+
+    @property
+    def fan_modes(self) -> list[str]:
+        """The speeds this unit's fan has (e.g. no "top" on a 3-speed fan)."""
+        return [SYS_FAN_TO_HA[fan] for fan in c.fan_speeds(self.coordinator.data.system)]
 
     @property
     def current_temperature(self) -> float | None:
@@ -199,6 +202,10 @@ class IZoneSystemClimate(_TemperatureLimits, IZoneEntity, ClimateEntity):
         await self._apply(self._power(False))
 
     async def async_set_fan_mode(self, fan_mode: str) -> None:
+        if fan_mode not in self.fan_modes:
+            raise ServiceValidationError(
+                f"This unit's fan speeds are {', '.join(self.fan_modes)}"
+            )
         fan = HA_TO_SYS_FAN[fan_mode]
         if self.system.get("SysFan") != fan:
             await self._apply({(None, "SysFan"): fan})

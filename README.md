@@ -14,7 +14,7 @@ It does not use the cloud.
 
 | Entity | Notes |
 | --- | --- |
-| AC climate | Off / Cool / Heat / Fan only / Dry / Heat-Cool (iZone "Auto"); fan low, medium, high, auto, top. When a control zone is set (`CtrlZone`), the target and current temperature come from that zone. |
+| AC climate | Off / Cool / Heat / Fan only / Dry / Heat-Cool (iZone "Auto"); fan speeds as the unit reports them (`FanAutoEn`, `FanAutoType`): low, medium and high, plus auto and top where the fan has them. When a control zone is set (`CtrlZone`), the target and current temperature come from that zone. |
 | Zone climate (one per zone, on its own device named after the zone, which suggests a room of the same name) | Off = damper closed (or the AC is off), Fan only = open, Auto = temperature-controlled (only on zones of type Auto). Setting a temperature on a closed or open zone switches it to Auto. Zones also switch the AC on and off; see below. Bypass zones get no climate entity, because the system controls them itself. |
 | Sensors | Supply air temperature, return air temperature, AC error code, AC run hours, control zone (the zone the unit is following, or `unit`); zone temperature and damper position, plus battery and signal strength for wireless zone sensors. |
 | Binary sensors | Filter warning, AC fault, bridge problem; zone sensor fault and damper fault. |

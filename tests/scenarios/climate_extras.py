@@ -80,7 +80,23 @@ async def main():
               and (living.min_temp, living.max_temp) == (18.0, 26.0),
               (ac.min_temp, ac.max_temp))
         check("reported Quiet fan is named, not offered",
-              ac.fan_mode == "quiet" and "quiet" not in ac._attr_fan_modes, ac.fan_mode)
+              ac.fan_mode == "quiet" and "quiet" not in ac.fan_modes, ac.fan_mode)
+        check("fan type not reported: every speed offered",
+              ac.fan_modes == ["low", "medium", "high", "auto", "top"], ac.fan_modes)
+        for en, kind, speeds in ((1, 1, ["low", "medium", "high", "auto"]),
+                                 (1, 0, ["low", "high", "auto"]),
+                                 (1, 3, ["low", "medium", "high", "auto", "top"]),
+                                 (0, 3, ["low", "medium", "high"])):
+            co.data.system.update(FanAutoEn=en, FanAutoType=kind)
+            check(f"FanAutoEn {en}, FanAutoType {kind}: {speeds}", ac.fan_modes == speeds,
+                  ac.fan_modes)
+        try:
+            await ac.async_set_fan_mode("auto")
+            check("a speed the unit lacks is refused", False)
+        except ServiceValidationError as err:
+            check("a speed the unit lacks is refused", "low, medium, high" in str(err), err)
+        for key in ("FanAutoEn", "FanAutoType"):
+            del co.data.system[key]
 
         cmds.clear()
         await ac.async_set_temperature(temperature=30, hvac_mode=HVACMode.COOL)
