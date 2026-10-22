@@ -14,8 +14,13 @@ jobs:
       - uses: actions/setup-python@v6
         with:
           python-version: "3.13"
-      - run: pip install aiohttp voluptuous
+      - run: pip install aiohttp voluptuous coverage
       - run: python -m unittest discover -s tests -v
+      - name: Coverage (each scenario, combined; must stay above 95%)
+        run: |
+          for f in tests/scenarios/*.py; do python -m coverage run -p "$f" > /dev/null; done
+          python -m coverage combine
+          python -m coverage report -m --fail-under=95
 
   lint:
     name: Lint (ruff)

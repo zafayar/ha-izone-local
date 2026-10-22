@@ -14,6 +14,7 @@ sys.path.insert(0, str(_ROOT / "custom_components"))
 import asyncio
 import importlib
 import json
+import socket
 from types import SimpleNamespace
 
 import aiohttp
@@ -75,7 +76,7 @@ class Registry:
 
 
 REGISTRY = Registry()
-RELOADS, LISTENERS, ENTRY = [], [], []
+RELOADS, LISTENERS, ENTRY, SYSTEM_READS, UNLOADED, BROADCAST = [], [], [], [], [], []
 dr = sys.modules["homeassistant.helpers.device_registry"]
 dr.async_get = lambda hass: REGISTRY
 dr.DeviceRegistry = Registry
@@ -99,6 +100,7 @@ Z = [
 async def req(r):
     b = (await r.json())["iZoneV2Request"]
     if b["Type"] == 1:
+        SYSTEM_READS.append(1)
         return web.Response(text=json.dumps({"AirStreamDeviceUId": "000012345", "SystemV2": SYS}))
     if b["Type"] == 6:
         return web.Response(text=json.dumps({"Fmw": "COCB-2F5 4.36 (000000042),CR 3.23"}))
@@ -134,10 +136,27 @@ async def setup(session, host):
     async def reload(entry_id):
         RELOADS.append(entry_id)
 
+    async def unload_platforms(entry, platforms):
+        UNLOADED.append(list(platforms))
+        return True
+
     hass = SimpleNamespace(config_entries=SimpleNamespace(
-        async_forward_entry_setups=forward, async_reload=reload))
+        async_forward_entry_setups=forward, async_reload=reload,
+        async_unload_platforms=unload_platforms))
+    await integration.async_setup(hass, {})
     ok = await integration.async_setup_entry(hass, entry)
+
+    # The bridge broadcasts a change (if the port could be opened here).
+    reads = len(SYSTEM_READS)
+    sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+    sock.sendto(b"iZoneChanged_Zones", ("127.0.0.1", 7005))
+    sock.close()
+    await asyncio.sleep(0.3)
+    BROADCAST.append(len(SYSTEM_READS) > reads)
+
     if len(entry.update_listeners) == 1:
+        # Updated, but not the options (e.g. a new address): no reload here.
+        await entry.update_listeners[0](hass, entry)
         # Options changed: notifications turned off.
         entry.options = {"notifications": False}
         ha_stubs.notifications["izone_local_000012345_filter"] = ("Filter", "")
@@ -145,6 +164,7 @@ async def setup(session, host):
     LISTENERS.append(len(entry.update_listeners))
     for close in unloads:
         close()
+    await integration.async_unload_entry(hass, entry)
     return ok
 
 
@@ -172,6 +192,8 @@ async def main():
         check("every zone device linked to the AC by device ID",
               all(z is not None and z.via_device_id == ac.id for z in zones),
               [(z and z.via_device_id) for z in zones])
+        check("a change broadcast from the bridge triggers a read", BROADCAST[0], BROADCAST)
+        check("unload unloads every platform", len(UNLOADED[0]) == 6, UNLOADED)
         check("hub firmware is the AC device's software version", ac.sw_version == "4.36",
               ac.sw_version)
         check("options listener: turning notifications off clears them and reloads",

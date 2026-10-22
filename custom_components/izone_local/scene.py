@@ -253,12 +253,11 @@ class IZoneFavouriteScene(IZoneEntity, Scene):
                     "Setpoint": stored["Setpoint"] or to_centi(23),
                 }
             )
-        if zone_mode is not None:
-            new_mode = ZONE_MODE_CHOICES[zone_mode]
-        elif temperature is not None:
-            new_mode = c.ZONE_MODE_AUTO  # as on a zone: a temperature means auto
-        else:
-            new_mode = zones[index]["Mode"]
+        # Without a zone_mode there's a temperature (checked by the caller),
+        # and as on a zone, a temperature means auto.
+        new_mode = (
+            ZONE_MODE_CHOICES[zone_mode] if zone_mode is not None else c.ZONE_MODE_AUTO
+        )
         if new_mode == c.ZONE_MODE_AUTO and data.get("ZoneType") != c.ZONE_TYPE_AUTO:
             raise ServiceValidationError(
                 translation_domain=c.DOMAIN,

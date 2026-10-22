@@ -208,7 +208,7 @@ class IZoneClient:
                         "%s failed (%s), retry %d in %ss", url, err, attempt + 1, delay
                     )
                     await asyncio.sleep(delay)
-        raise AssertionError("unreachable")
+        raise AssertionError("unreachable")  # pragma: no cover
 
     async def _post_once(self, url: str, payload: dict[str, Any]) -> str:
         try:
@@ -346,9 +346,6 @@ class IZoneClient:
 
     async def set_isave(self, on: bool) -> None:
         await self.command("iSaveOn", 1 if on else 0)
-
-    async def set_sleep_timer(self, minutes: int) -> None:
-        await self.command("SysSleepTimer", minutes)
 
     async def set_zone_mode(self, index: int, mode: int) -> None:
         await self.command("ZoneMode", {"Index": index, "Mode": mode})
