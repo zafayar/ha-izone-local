@@ -52,6 +52,37 @@ ZEROED_GRACE = 300
 FIRMWARE_INTERVAL = 6 * 3600
 FIRMWARE_RETRY = 600
 
+# Sleep timer: the AC turns itself off when it runs out. The wall panel's
+# button steps through these (then back to off); the bridge also takes any
+# other multiple of 30 up to 720, and answers {ERROR} to anything else.
+# Setting one while the AC is off turns the AC on, as the panel does.
+# SleepTimerM is the minutes left, counting down; SleepTimer only echoes the
+# last value set, often late, and isn't cleared when the timer is (measured).
+SLEEP_TIMER_OPTIONS = {
+    "off": 0,
+    "30m": 30,
+    "1h": 60,
+    "2h": 120,
+    "4h": 240,
+    "6h": 360,
+    "8h": 480,
+    "12h": 720,
+}
+# The bridge shows a new timer 1-7.4 s after accepting it (measured), later
+# than other changes: re-send only after this long.
+SLEEP_TIMER_SETTLE = 10
+
+
+def sleep_timer_option(minutes: int | None) -> str:
+    """The panel step showing the minutes left: the next one up (5 h 59 min
+    left shows as 6 h), or off."""
+    if not minutes:
+        return "off"
+    return next(
+        (o for o, m in SLEEP_TIMER_OPTIONS.items() if m >= minutes), "12h"
+    )
+
+
 # Progress shown in each entity's "status" attribute, with its icon.
 STATUS_READY = "ready"
 STATUS_QUEUED = "queued"

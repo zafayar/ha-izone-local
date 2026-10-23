@@ -193,7 +193,7 @@ async def main():
               all(z is not None and z.via_device_id == ac.id for z in zones),
               [(z and z.via_device_id) for z in zones])
         check("a change broadcast from the bridge triggers a read", BROADCAST[0], BROADCAST)
-        check("unload unloads every platform", len(UNLOADED[0]) == 6, UNLOADED)
+        check("unload unloads every platform", len(UNLOADED[0]) == 7, UNLOADED)
         check("hub firmware is the AC device's software version", ac.sw_version == "4.36",
               ac.sw_version)
         check("options listener: turning notifications off clears them and reloads",

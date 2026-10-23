@@ -101,6 +101,14 @@ class SwitchEntity(Entity):
     pass
 
 
+class SelectEntity(Entity):
+    _attr_options: list = []
+
+    @property
+    def options(self):
+        return self._attr_options
+
+
 @dataclass(frozen=True, kw_only=True)
 class EntityDescription:
     key: str
@@ -155,6 +163,7 @@ class Platform(StrEnum):
     CLIMATE = "climate"
     NUMBER = "number"
     SCENE = "scene"
+    SELECT = "select"
     SENSOR = "sensor"
     SWITCH = "switch"
 
@@ -345,6 +354,7 @@ mod("homeassistant.components.binary_sensor", BinarySensorEntity=BinarySensorEnt
     BinarySensorDeviceClass=BinarySensorDeviceClass)
 mod("homeassistant.components.switch", SwitchEntity=SwitchEntity)
 mod("homeassistant.components.scene", Scene=Scene)
+mod("homeassistant.components.select", SelectEntity=SelectEntity)
 mod("homeassistant.components.number", NumberEntity=NumberEntity, NumberMode=NumberMode)
 mod("homeassistant.const", ATTR_TEMPERATURE="temperature", CONF_HOST="host",
     PERCENTAGE="%", EntityCategory=EntityCategory, UnitOfTemperature=UnitOfTemperature,

@@ -33,6 +33,10 @@ type IZoneConfigEntry = ConfigEntry[IZoneCoordinator]
 # index for the system datagram. E.g. (2, "Mode"), (None, "SysOn").
 type PendingKey = tuple[int | None, str]
 
+# The sleep timer is asked for by the minutes left, which the bridge reports
+# (the command itself is SysSleepTimer).
+SLEEP_TIMER_KEY: PendingKey = (None, "SleepTimerM")
+
 _UNSEEN = object()  # a want's last_seen before the first sync after the request
 
 
@@ -487,13 +491,13 @@ class IZoneCoordinator(DataUpdateCoordinator[IZoneData]):
         now = time.monotonic()
         for key, want in list(self._wants.items()):
             actual = self._raw(data, key)
-            if actual == want.value:
+            if self._shows(key, actual, want.value):
                 del self._wants[key]
                 continue
             if self._sensor_wait(data, key, want, now):
                 continue
             seen, want.last_seen = want.last_seen, actual
-            if seen is not _UNSEEN and actual != seen:
+            if seen is not _UNSEEN and self._moved(key, seen, actual):
                 del self._wants[key]
                 _LOGGER.info(
                     "%s was changed elsewhere to %r while %r was being applied; "
@@ -527,6 +531,22 @@ class IZoneCoordinator(DataUpdateCoordinator[IZoneData]):
                 else:
                     request.done.set_result(None)
         self._requests = [r for r in self._requests if not r.done.done()]
+
+    @staticmethod
+    def _shows(key: PendingKey, actual: Any, wanted: Any) -> bool:
+        """Whether the bridge shows the value asked for. The sleep timer
+        starts counting down at once, so a minute less counts."""
+        if key == SLEEP_TIMER_KEY and wanted and isinstance(actual, int):
+            return wanted - 1 <= actual <= wanted
+        return actual == wanted
+
+    @staticmethod
+    def _moved(key: PendingKey, seen: Any, actual: Any) -> bool:
+        """Whether a field changed between syncs other than by itself: a
+        running sleep timer ticking down a minute isn't a change."""
+        if key == SLEEP_TIMER_KEY and isinstance(seen, int) and isinstance(actual, int):
+            return not 0 <= seen - actual <= 1
+        return actual != seen
 
     def _sensor_wait(
         self, data: IZoneData, key: PendingKey, want: _Want, now: float
@@ -636,7 +656,8 @@ class IZoneCoordinator(DataUpdateCoordinator[IZoneData]):
     async def _send(self, key: PendingKey, want: _Want) -> None:
         want.sent_at = time.monotonic()
         want.attempts += 1
-        want.resend_after = None  # sent on its own now: normal timing
+        # Sent on its own now: normal timing, except for the slow timer.
+        want.resend_after = c.SLEEP_TIMER_SETTLE if key == SLEEP_TIMER_KEY else None
         self.async_update_listeners()
         try:
             await self._command(key, want.value)()
@@ -661,6 +682,7 @@ class IZoneCoordinator(DataUpdateCoordinator[IZoneData]):
             "SysFan": lambda: client.set_fan(value),
             "Setpoint": lambda: client.set_setpoint(from_centi(value)),
             "iSaveOn": lambda: client.set_isave(bool(value)),
+            "SleepTimerM": lambda: client.set_sleep_timer(value),
         }[name]
 
     @staticmethod

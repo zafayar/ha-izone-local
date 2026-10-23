@@ -50,6 +50,14 @@
         "default": "mdi:fan-chevron-up"
       }
     },
+    "select": {
+      "sleep_timer": {
+        "default": "mdi:timer-outline",
+        "state": {
+          "off": "mdi:timer-off-outline"
+        }
+      }
+    },
     "switch": {
       "isave": {
         "default": "mdi:leaf"

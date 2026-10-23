@@ -5,7 +5,9 @@ import sys
 
 _ROOT = pathlib.Path(__file__).resolve().parents[2]
 sys.path.insert(0, str(_ROOT / "tests"))
-sys.path.insert(0, str(_ROOT / "custom_components/izone_local"))
+# Appended, not first: the package's select.py would hide the standard
+# library's select module.
+sys.path.append(str(_ROOT / "custom_components/izone_local"))
 
 
 import asyncio

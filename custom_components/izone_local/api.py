@@ -347,6 +347,11 @@ class IZoneClient:
     async def set_isave(self, on: bool) -> None:
         await self.command("iSaveOn", 1 if on else 0)
 
+    async def set_sleep_timer(self, minutes: int) -> None:
+        """Turn the AC off after this many minutes (a multiple of 30, up to
+        720); 0 cancels the timer. Turns the AC on if it's off."""
+        await self.command("SysSleepTimer", minutes)
+
     async def set_zone_mode(self, index: int, mode: int) -> None:
         await self.command("ZoneMode", {"Index": index, "Mode": mode})
 
