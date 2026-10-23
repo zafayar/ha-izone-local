@@ -24,6 +24,9 @@
       "firmware": {
         "default": "mdi:chip"
       },
+      "sleep_timer_end": {
+        "default": "mdi:timer-sand"
+      },
       "sensor_battery": {
         "default": "mdi:battery",
         "state": {

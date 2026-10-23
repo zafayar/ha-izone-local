@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from collections.abc import Callable
 from dataclasses import dataclass
+from datetime import datetime, timedelta
 from typing import Any
 
 from homeassistant.components.sensor import (
@@ -20,12 +21,14 @@ from homeassistant.const import (
 )
 from homeassistant.core import HomeAssistant
 from homeassistant.helpers.entity_platform import AddConfigEntryEntitiesCallback
+from homeassistant.util import dt as dt_util
 
 from .api import from_centi
 from .const import (
     CTRL_ZONE_UNIT,
     SENS_TYPE_NONE,
     SENS_TYPE_WIRELESS,
+    SLEEP_TIMER_END_TOLERANCE,
     firmware_label,
     sensor_faulted,
     zone_name,
@@ -137,6 +140,7 @@ async def async_setup_entry(
         IZoneSystemSensor(coordinator, desc) for desc in SYSTEM_SENSORS
     ]
     entities.append(IZoneControlZoneSensor(coordinator))
+    entities.append(IZoneSleepTimerEndSensor(coordinator))
     entities.extend(
         IZoneFirmwareSensor(coordinator, module) for module in coordinator.firmware
     )
@@ -185,6 +189,33 @@ class IZoneControlZoneSensor(IZoneEntity, SensorEntity):
             return "unit"
         zone = self.coordinator.data.zones.get(index)
         return zone_name(zone, index) if zone is not None else None
+
+
+class IZoneSleepTimerEndSensor(IZoneEntity, SensorEntity):
+    """When the sleep timer will turn the AC off; unknown with no timer.
+
+    Worked out from the minutes left, so it's good to about a minute.
+    """
+
+    _attr_translation_key = "sleep_timer_end"
+    _attr_device_class = SensorDeviceClass.TIMESTAMP
+
+    def __init__(self, coordinator: IZoneCoordinator) -> None:
+        super().__init__(coordinator, "sleep_timer_end")
+        self._end: datetime | None = None
+
+    @property
+    def native_value(self) -> datetime | None:
+        minutes = self.system.get("SleepTimerM")
+        if not minutes or not self.system.get("SysOn"):
+            self._end = None
+            return None
+        end = dt_util.utcnow() + timedelta(minutes=minutes)
+        # Between countdown steps the estimate creeps a minute later; keep
+        # the earlier one unless the timer was changed.
+        if self._end is None or abs(end - self._end) > SLEEP_TIMER_END_TOLERANCE:
+            self._end = end
+        return self._end
 
 
 class IZoneFirmwareSensor(IZoneEntity, SensorEntity):

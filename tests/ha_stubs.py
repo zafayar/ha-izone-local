@@ -7,6 +7,7 @@ run async_setup_entry; not a substitute for real HA behaviour.
 import sys
 import types
 from dataclasses import dataclass
+from datetime import UTC, datetime
 from enum import IntFlag, StrEnum
 from typing import Any
 
@@ -124,6 +125,7 @@ class SensorDeviceClass(StrEnum):
     TEMPERATURE = "temperature"
     DURATION = "duration"
     ENUM = "enum"
+    TIMESTAMP = "timestamp"
 
 
 class SensorStateClass(StrEnum):
@@ -367,6 +369,8 @@ mod("homeassistant.config_entries", ConfigEntry=ConfigEntry, ConfigFlow=ConfigFl
     OptionsFlow=OptionsFlow, SOURCE_INTEGRATION_DISCOVERY="integration_discovery",
     ConfigFlowResult=dict)
 mod("homeassistant.helpers")
+mod("homeassistant.util")
+mod("homeassistant.util.dt", utcnow=lambda: datetime.now(UTC))
 mod("homeassistant.helpers.config_validation", config_entry_only_config_schema=lambda domain: None)
 mod("homeassistant.helpers.typing", ConfigType=dict, DiscoveryInfoType=dict)
 mod("homeassistant.helpers.discovery_flow",
