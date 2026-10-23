@@ -30,6 +30,8 @@ It does not use the cloud.
   the bedrooms before bedtime or closing zones when everyone leaves.
 - Run the favourites saved in the iZone app as scenes, and change what they
   store from Home Assistant.
+- Set the sleep timer, as on the wall panel, for example to run the AC for
+  an hour at bedtime.
 - Get told when the filter is due a clean, and keep an eye on wireless zone
   sensors' batteries and signal.
 - Recover a bridge that stops responding, with the Bridge problem sensor and
@@ -41,8 +43,9 @@ It does not use the cloud.
 | --- | --- |
 | AC climate | Off / Cool / Heat / Fan only / Dry / Heat-Cool (iZone "Auto"); fan speeds as the unit reports them (`FanAutoEn`, `FanAutoType`): low, medium and high, plus auto and top where the fan has them. When a control zone is set (`CtrlZone`), the target and current temperature come from that zone. |
 | Zone climate (one per zone, on its own device named after the zone, which suggests a room of the same name) | Off = damper closed (or the AC is off), Fan only = open, Auto = temperature-controlled (only on zones of type Auto). Setting a temperature on a closed or open zone switches it to Auto. Zones also switch the AC on and off; see below. Bypass zones get no climate entity, because the system controls them itself. |
-| Sensors | Supply air temperature, return air temperature, AC error code, AC run hours, control zone (the zone the unit is following, or `unit`), firmware version of each module (hub, wall controller, boards; off by default, as the hub's version is also the AC device's software version); zone temperature and damper position, plus battery and signal strength for wireless zone sensors. |
+| Sensors | Supply air temperature, return air temperature, AC error code, AC run hours, control zone (the zone the unit is following, or `unit`), when the sleep timer ends, firmware version of each module (hub, wall controller, boards; off by default, as the hub's version is also the AC device's software version); zone temperature and damper position, plus battery and signal strength for wireless zone sensors. |
 | Binary sensors | Filter warning, AC fault, bridge problem; zone sensor fault and damper fault. |
+| Select | Sleep timer (see below). |
 | Switch | iSave (only if the system has iSave enabled). |
 | Scenes | One per favourite saved on the controller (see below). |
 | Numbers | Each zone's minimum and maximum airflow (settings, off by default). |
@@ -146,6 +149,23 @@ state_content:
   switch it back to `auto` to take it).
 - Heat, cool and dry are whole-unit modes, set on the AC. Asking a zone for
   one gives a clear error.
+
+### Sleep timer
+
+The **Sleep timer** select sets the controller's own timer, which turns the
+AC off when it runs out. It offers the wall panel's steps: off, 30 minutes,
+1, 2, 4, 6, 8 and 12 hours.
+
+- It runs on the controller and shows on the wall panel, so it still turns
+  the AC off if Home Assistant is down. A timer set on the panel shows here
+  too.
+- While it runs, the select shows the time left rounded up to a step (5 h
+  59 min left shows as 6 hours), and its `minutes_left` attribute has the
+  minutes. The **Sleep timer ends** sensor has the time it will go off.
+- Choosing a time while the AC is off turns the AC on for that long, as the
+  panel's button does. Choosing a time while a timer runs replaces it.
+- **Off** cancels the timer and leaves the AC running. Turning the AC off
+  also ends the timer.
 
 ### Favourites
 
@@ -335,9 +355,8 @@ favourites you edited.
 
 - Not supported: schedules (timed favourites), renaming favourites, split
   and VRF systems, iLight, iDrate and iPower.
-- The sleep timer is left out on purpose: on a real controller, setting it
-  turns the AC on, and setting it back to 0 doesn't cancel it (only turning
-  the AC off does, about 10 s later), so it doesn't work as a setting.
+- The sleep timer only takes the panel's steps. The controller counts
+  whole minutes, so the end time is good to about a minute.
 - Favourites are read when the integration starts. After adding or renaming
   one in the app, reload the integration.
 - Changes made at the wall controller or in the app show within seconds only
@@ -397,6 +416,21 @@ automation:
       - action: izone_local.update_favourite
         target: { entity_id: scene.evening }
         data: { mode: heat }
+```
+
+Run the AC for an hour at bedtime (this turns it on if it's off; the entity
+ID follows your AC device's name):
+
+```yaml
+automation:
+  - alias: AC for the first hour of the night
+    triggers:
+      - trigger: time
+        at: "22:00:00"
+    actions:
+      - action: select.select_option
+        target: { entity_id: select.ac_sleep_timer }
+        data: { option: 1h }
 ```
 
 Warn when a wireless zone sensor's battery is running out:
@@ -476,6 +510,13 @@ sleep timer, zone mode and zone setpoint. More findings:
   apart, and every change is read back and re-sent if it was dropped.
 - Each zone was controlled through its own entity, and the other zones were
   confirmed unchanged.
+- The sleep timer (`SysSleepTimer`) takes 0 or a multiple of 30 up to 720
+  minutes, and answers `{ERROR}` to anything else. `SleepTimerM` is the
+  minutes left, counting down; it shows a new timer 1–7 s after the command,
+  usually a minute less. `SleepTimer` only echoes the last value set: it can
+  lag, and isn't cleared when the timer is. 0 cancels the timer (this
+  integration's first tests read `SleepTimer` and wrongly concluded it
+  couldn't be cancelled). Setting a timer while the AC is off turns it on.
 - While a zone is the control zone (`CtrlZone` 0–13), the unit's `Setpoint`
   shows that zone's setpoint and `SysSetpoint` is ignored. The AC entity then
   sends its temperature to that zone instead. `CtrlZone` can't be set directly;
