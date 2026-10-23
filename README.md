@@ -512,8 +512,8 @@ sleep timer, zone mode and zone setpoint. More findings:
   confirmed unchanged.
 - The sleep timer (`SysSleepTimer`) takes 0 or a multiple of 30 up to 720
   minutes, and answers `{ERROR}` to anything else. `SleepTimerM` is the
-  minutes left, counting down; it shows a new timer 1–7 s after the command,
-  usually a minute less. `SleepTimer` only echoes the last value set: it can
+  minutes left, counting down; it shows a new timer 1–10 s after the
+  command, usually a minute less, so the select takes about 10 s to confirm. `SleepTimer` only echoes the last value set: it can
   lag, and isn't cleared when the timer is. 0 cancels the timer (this
   integration's first tests read `SleepTimer` and wrongly concluded it
   couldn't be cancelled). Setting a timer while the AC is off turns it on.

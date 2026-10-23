@@ -68,9 +68,10 @@ SLEEP_TIMER_OPTIONS = {
     "8h": 480,
     "12h": 720,
 }
-# The bridge shows a new timer 1-7.4 s after accepting it (measured), later
-# than other changes: re-send only after this long.
-SLEEP_TIMER_SETTLE = 10
+# The bridge shows a new timer much later than other changes: 1-7.4 s after
+# accepting it when read every second, about 10 s while the reconcile loop
+# reads it (measured). A re-send restarts that wait, so it waits this long.
+SLEEP_TIMER_SETTLE = 15
 # The minutes left are whole minutes, so the end time worked out from them
 # is only good to a minute; it's only moved when it's out by more than this.
 SLEEP_TIMER_END_TOLERANCE = timedelta(seconds=90)
