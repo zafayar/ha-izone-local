@@ -101,6 +101,11 @@ async def main():
         info = living._attr_device_info
         check("zone device: clean name, suggested area",
               info["name"] == "Living" and info["suggested_area"] == "Living", info)
+        SYS["SleepTimer"], SYS["SleepTimerM"] = 720, 95
+        await co.async_refresh()
+        check("climate sleep_timer attribute: the minutes left, not the last value set",
+              clim[0].extra_state_attributes["sleep_timer"] == 95,
+              clim[0].extra_state_attributes)
         check("AC device named from Tag1 without padding",
               clim[0]._attr_device_info["name"] == "Ghar", clim[0]._attr_device_info["name"])
 

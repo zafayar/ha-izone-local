@@ -170,7 +170,8 @@ class IZoneSystemClimate(_TemperatureLimits, IZoneEntity, ClimateEntity):
             "supply_temperature": from_centi(self.system.get("Supply")),
             "return_temperature": from_centi(self.system.get("Temp")),
             "control_zone": self._control_zone,
-            "sleep_timer": self.system.get("SleepTimer"),
+            # Minutes left (SleepTimer only echoes the last value set).
+            "sleep_timer": self.system.get("SleepTimerM") or 0,
             "status": self.status,
             "pending": self.pending,
         }
