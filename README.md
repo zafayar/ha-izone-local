@@ -43,7 +43,7 @@ It does not use the cloud.
 | --- | --- |
 | AC climate | Off / Cool / Heat / Fan only / Dry / Heat-Cool (iZone "Auto"); fan speeds as the unit reports them (`FanAutoEn`, `FanAutoType`): low, medium and high, plus auto and top where the fan has them. When a control zone is set (`CtrlZone`), the target and current temperature come from that zone. |
 | Zone climate (one per zone, on its own device named after the zone, which suggests a room of the same name) | Off = damper closed (or the AC is off), Fan only = open, Auto = temperature-controlled (only on zones of type Auto). Setting a temperature on a closed or open zone switches it to Auto. Zones also switch the AC on and off; see below. Bypass zones get no climate entity, because the system controls them itself. |
-| Sensors | Supply air temperature, return air temperature, AC error code, AC run hours, control zone (the zone the unit is following, or `unit`), when the sleep timer ends, firmware version of each module (hub, wall controller, boards; off by default, as the hub's version is also the AC device's software version); zone temperature and damper position, plus battery and signal strength for wireless zone sensors. |
+| Sensors | Supply air temperature, return air temperature, AC error code, AC run hours, control zone (the zone the unit is following, or `unit`), sleep timer time left and when it ends, firmware version of each module (hub, wall controller, boards; off by default, as the hub's version is also the AC device's software version); zone temperature and damper position, plus battery and signal strength for wireless zone sensors. |
 | Binary sensors | Filter warning, AC fault, bridge problem; zone sensor fault and damper fault. |
 | Select | Sleep timer (see below). |
 | Switch | iSave (only if the system has iSave enabled). |
@@ -160,12 +160,28 @@ AC off when it runs out. It offers the wall panel's steps: off, 30 minutes,
   the AC off if Home Assistant is down. A timer set on the panel shows here
   too.
 - While it runs, the select shows the time left rounded up to a step (5 h
-  59 min left shows as 6 hours), and its `minutes_left` attribute has the
-  minutes. The **Sleep timer ends** sensor has the time it will go off.
+  59 min left shows as 6 hours). For the exact time left, the **Sleep timer
+  left** sensor counts down in minutes (0 with no timer), and the **Sleep
+  timer ends** sensor has the time it will go off, which dashboards show as
+  "in 47 minutes".
 - Choosing a time while the AC is off turns the AC on for that long, as the
   panel's button does. Choosing a time while a timer runs replaces it.
 - **Off** cancels the timer and leaves the AC running. Turning the AC off
   also ends the timer.
+
+To see the time left next to the timer, add them to a dashboard together
+(check the entity IDs on the AC's device page):
+
+```yaml
+type: entities
+title: Sleep timer
+entities:
+  - entity: select.ac_sleep_timer
+  - entity: sensor.ac_sleep_timer_left
+    name: Time left
+  - entity: sensor.ac_sleep_timer_ends
+    name: Turns off
+```
 
 ### Favourites
 
