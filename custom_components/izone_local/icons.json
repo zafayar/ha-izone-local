@@ -27,6 +27,9 @@
       "sleep_timer_end": {
         "default": "mdi:timer-sand"
       },
+      "sleep_timer_left": {
+        "default": "mdi:timer-sand"
+      },
       "sensor_battery": {
         "default": "mdi:battery",
         "state": {

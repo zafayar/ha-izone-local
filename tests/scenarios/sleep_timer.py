@@ -108,6 +108,7 @@ async def main():
         sens = []
         await sensor.async_setup_entry(None, entry, sens.extend)
         end = next(e for e in sens if isinstance(e, sensor.IZoneSleepTimerEndSensor))
+        left = next(e for e in sens if e.unique_id == "1_sleep_timer_left")
         now = [datetime(2026, 10, 23, 21, 0, tzinfo=UTC)]
         sensor.dt_util.utcnow = lambda: now[0]
         check(
@@ -115,6 +116,12 @@ async def main():
             end.unique_id == "1_sleep_timer_end"
             and end._attr_device_class == "timestamp"
             and end.native_value is None,
+        )
+        check(
+            "time left: minutes, 0 with no timer",
+            left.entity_description.device_class == "duration"
+            and left.entity_description.native_unit_of_measurement == "min"
+            and left.native_value == 0,
         )
         check(
             "one select, the panel's options",
@@ -135,6 +142,11 @@ async def main():
             and timer.extra_state_attributes["minutes_left"] == 59
             and timer.status == c.STATUS_READY,
             timer.extra_state_attributes,
+        )
+        check(
+            "time left: counts with the controller",
+            left.native_value == 59,
+            left.native_value,
         )
         first = end.native_value
         check(
@@ -209,7 +221,9 @@ async def main():
         await co.async_refresh()
         check(
             "AC off: shown as off",
-            timer.current_option == "off" and end.native_value is None,
+            timer.current_option == "off"
+            and end.native_value is None
+            and left.native_value == 0,
         )
         cmds.clear()
         await timer.async_select_option("off")

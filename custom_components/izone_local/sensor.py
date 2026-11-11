@@ -89,6 +89,16 @@ SYSTEM_SENSORS = (
         # Not in the published spec, but reported by the controller.
         value_fn=lambda d: d.get("AcRunH"),
     ),
+    IZoneSensorDescription(
+        key="sleep_timer_left",
+        translation_key="sleep_timer_left",
+        device_class=SensorDeviceClass.DURATION,
+        state_class=SensorStateClass.MEASUREMENT,
+        native_unit_of_measurement=UnitOfTime.MINUTES,
+        # Counted down by the controller once a minute; turning the AC off
+        # ends the timer, whatever the bridge still reports.
+        value_fn=lambda d: (d.get("SleepTimerM") or 0) if d.get("SysOn") else 0,
+    ),
 )
 
 ZONE_SENSORS = (
