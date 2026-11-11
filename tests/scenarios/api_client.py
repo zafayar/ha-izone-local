@@ -19,16 +19,48 @@ import aiohttp
 import api
 from aiohttp import web
 
-SYSTEM = {"SysOn": 1, "SysMode": 1, "SysFan": 2, "Setpoint": 2350, "Temp": 2410,
-          "Supply": 1600, "CtrlZone": 15, "NoOfZones": 2, "ACError": " OK",
-          "Warnings": "none", "iSaveEnable": 1, "iSaveOn": 0}
-ZONES = [{"Index": 0, "Name": "Living", "ZoneType": 3, "Mode": 3, "Setpoint": 2200,
-          "Temp": 2300, "DmpPos": 40},
-         {"Index": 1, "Name": "Bed 1", "ZoneType": 1, "Mode": 2, "Setpoint": 0,
-          "Temp": 0, "DmpPos": 0}]
+SYSTEM = {
+    "SysOn": 1,
+    "SysMode": 1,
+    "SysFan": 2,
+    "Setpoint": 2350,
+    "Temp": 2410,
+    "Supply": 1600,
+    "CtrlZone": 15,
+    "NoOfZones": 2,
+    "ACError": " OK",
+    "Warnings": "none",
+    "iSaveEnable": 1,
+    "iSaveOn": 0,
+}
+ZONES = [
+    {
+        "Index": 0,
+        "Name": "Living",
+        "ZoneType": 3,
+        "Mode": 3,
+        "Setpoint": 2200,
+        "Temp": 2300,
+        "DmpPos": 40,
+    },
+    {
+        "Index": 1,
+        "Name": "Bed 1",
+        "ZoneType": 1,
+        "Mode": 2,
+        "Setpoint": 0,
+        "Temp": 0,
+        "DmpPos": 0,
+    },
+]
 
-state = {"active": 0, "max_active": 0, "commands": [], "zone_key": "ZonesV2",
-         "mode": "normal"}
+state = {
+    "active": 0,
+    "max_active": 0,
+    "commands": [],
+    "zone_key": "ZonesV2",
+    "mode": "normal",
+}
 fails = []
 
 
@@ -60,8 +92,11 @@ async def handle_request(req):
         body = await req.json()
         r = body["iZoneV2Request"]
         if r["Type"] == 1:
-            out = {"AirStreamDeviceUId": "000012345", "DeviceType": "ASH",
-                   "SystemV2": {**SYSTEM, "LockCode": "LOCK"}}
+            out = {
+                "AirStreamDeviceUId": "000012345",
+                "DeviceType": "ASH",
+                "SystemV2": {**SYSTEM, "LockCode": "LOCK"},
+            }
             # Real bridges send raw 0xFF bytes here and no Content-Type.
             raw = json.dumps(out).encode().replace(b'"LOCK"', b'"\xff\xff\xff"')
             return web.Response(body=raw)
@@ -92,7 +127,9 @@ class Responder(asyncio.DatagramProtocol):
 
     def datagram_received(self, data, addr):
         if data == b"IASD":
-            self.t.sendto(b"ASPort_12107,Mac_000012345,IP_127.0.0.1,iZoneV2,iZone,X,iPower", addr)
+            self.t.sendto(
+                b"ASPort_12107,Mac_000012345,IP_127.0.0.1,iZoneV2,iZone,X,iPower", addr
+            )
 
 
 async def main():
@@ -116,13 +153,19 @@ async def main():
         state["requests"] = 0
         state["fail_next"] = 2
         uid, _ = await client.get_system()
-        check("two server errors, then retried successfully",
-              uid == "000012345" and state["requests"] == 3, state["requests"])
+        check(
+            "two server errors, then retried successfully",
+            uid == "000012345" and state["requests"] == 3,
+            state["requests"],
+        )
         state["requests"] = 0
         state["drop_next"] = 1
         uid, _ = await client.get_system()
-        check("dropped connection, then retried successfully",
-              uid == "000012345" and state["requests"] == 2, state["requests"])
+        check(
+            "dropped connection, then retried successfully",
+            uid == "000012345" and state["requests"] == 2,
+            state["requests"],
+        )
         state["requests"] = 0
         check("get_system data", system["Setpoint"] == 2350)
 
@@ -142,10 +185,18 @@ async def main():
         await client.set_zone_mode(0, 2)
         await client.set_zone_setpoint(1, 21.0)
         await client.set_isave(False)
-        check("command payloads", state["commands"] == [
-            {"SysOn": 1}, {"SysSetpoint": 2350}, {"ZoneMode": {"Index": 0, "Mode": 2}},
-            {"ZoneSetpoint": {"Index": 1, "Setpoint": 2100}}, {"iSaveOn": 0}],
-            state["commands"])
+        check(
+            "command payloads",
+            state["commands"]
+            == [
+                {"SysOn": 1},
+                {"SysSetpoint": 2350},
+                {"ZoneMode": {"Index": 0, "Mode": 2}},
+                {"ZoneSetpoint": {"Index": 1, "Setpoint": 2100}},
+                {"iSaveOn": 0},
+            ],
+            state["commands"],
+        )
 
         api.BUSY_RETRY_DELAYS = (0.01, 0.01, 0.01, 0)
 
@@ -160,8 +211,11 @@ async def main():
         state["commands"].clear()
         state["busy"] = 2
         await client.set_fan(4)
-        check("BUSY retried then OK", state["commands"] == [{"SysFan": 4}] * 3,
-              state["commands"])
+        check(
+            "BUSY retried then OK",
+            state["commands"] == [{"SysFan": 4}] * 3,
+            state["commands"],
+        )
         state["busy"] = 10
         try:
             await client.set_fan(4)
@@ -183,24 +237,32 @@ async def main():
         except api.IZoneCommandError:
             check("rejected command raises", True)
 
-        for mode, exc, tries in (("500", api.IZoneConnectionError, 3),
-                                 ("badjson", api.IZoneConnectionError, 1)):
+        for mode, exc, tries in (
+            ("500", api.IZoneConnectionError, 3),
+            ("badjson", api.IZoneConnectionError, 1),
+        ):
             state["mode"] = mode
             state["requests"] = 0
             try:
                 await client.get_system()
                 check(f"{mode} raises", False)
             except exc:
-                check(f"{mode} raises after {tries} attempt(s)",
-                      state["requests"] == tries, state["requests"])
+                check(
+                    f"{mode} raises after {tries} attempt(s)",
+                    state["requests"] == tries,
+                    state["requests"],
+                )
         state["mode"] = "slow"
         api.REQUEST_TIMEOUT = 0.5
         try:
             await client.get_system()
             check("timeout raises", False)
         except api.IZoneConnectionError as err:
-            check("timeout raises IZoneConnectionError, naming the error",
-                  "TimeoutError" in str(err), str(err))
+            check(
+                "timeout raises IZoneConnectionError, naming the error",
+                "TimeoutError" in str(err),
+                str(err),
+            )
         state["mode"] = "normal"
 
         dead = api.IZoneClient(session, "127.0.0.1:1")
@@ -210,20 +272,32 @@ async def main():
         except api.IZoneConnectionError:
             check("unreachable raises", True)
 
-    check("to_centi rounding", [api.to_centi(x) for x in (23.4, 22.25, 40, 10)]
-          == [2350, 2250, 3000, 1500], [api.to_centi(x) for x in (23.4, 22.25, 40, 10)])
+    check(
+        "to_centi rounding",
+        [api.to_centi(x) for x in (23.4, 22.25, 40, 10)] == [2350, 2250, 3000, 1500],
+        [api.to_centi(x) for x in (23.4, 22.25, 40, 10)],
+    )
     check("from_centi", api.from_centi(2350) == 23.5 and api.from_centi(None) is None)
-    b = api.parse_discovery_reply(b"ASPort_12107,Mac_000012345,IP_192.168.1.50,iZoneV2,iZone,X,iPower")
-    check("parse discovery", b and b.uid == "000012345" and b.host == "192.168.1.50"
-          and b.supports_v2 and "X" not in b.capabilities, b)
+    b = api.parse_discovery_reply(
+        b"ASPort_12107,Mac_000012345,IP_192.168.1.50,iZoneV2,iZone,X,iPower"
+    )
+    check(
+        "parse discovery",
+        b
+        and b.uid == "000012345"
+        and b.host == "192.168.1.50"
+        and b.supports_v2
+        and "X" not in b.capabilities,
+        b,
+    )
     check("parse junk", api.parse_discovery_reply(b"hello") is None)
 
     # Discovery over real broadcast to a local responder
     loop = asyncio.get_running_loop()
     try:
         t, _ = await loop.create_datagram_endpoint(
-            Responder, local_addr=("0.0.0.0", api.DISCOVERY_PORT),
-            family=socket.AF_INET)
+            Responder, local_addr=("0.0.0.0", api.DISCOVERY_PORT), family=socket.AF_INET
+        )
         found = await api.async_discover(timeout=1.5)
         t.close()
         print(f"INFO discovery found: {found}")

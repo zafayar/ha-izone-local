@@ -175,13 +175,18 @@ class IZoneCoordinator(DataUpdateCoordinator[IZoneData]):
     def _notify(self, kind: str, title: str, message: str) -> None:
         if self.notifications_enabled:
             persistent_notification.async_create(
-                self.hass, message, title=title, notification_id=self._notification_id(kind)
+                self.hass,
+                message,
+                title=title,
+                notification_id=self._notification_id(kind),
             )
 
     def dismiss_notifications(self) -> None:
         """Remove this bridge's notifications (the option was turned off)."""
         for kind in ("filter", "firmware"):
-            persistent_notification.async_dismiss(self.hass, self._notification_id(kind))
+            persistent_notification.async_dismiss(
+                self.hass, self._notification_id(kind)
+            )
 
     def _update_filter_notification(self, system: dict[str, Any]) -> None:
         """Notify once per filter warning (a dismissed notification isn't
@@ -256,7 +261,9 @@ class IZoneCoordinator(DataUpdateCoordinator[IZoneData]):
             raise UpdateFailed(
                 translation_domain=c.DOMAIN,
                 translation_key="zeroed_data",
-                translation_placeholders={"seconds": str(round(now - self._zeroed_since))},
+                translation_placeholders={
+                    "seconds": str(round(now - self._zeroed_since))
+                },
             ) from err
         return self.data
 
@@ -370,7 +377,10 @@ class IZoneCoordinator(DataUpdateCoordinator[IZoneData]):
         of open requests, plus any still being applied (e.g. after a sensor
         came back)."""
         keys = {
-            key for r in self._requests if not r.done.done() for key in r.keys
+            key
+            for r in self._requests
+            if not r.done.done()
+            for key in r.keys
             if match(key)
         } | {k for k, w in self._wants.items() if match(k) and not w.waiting_for_sensor}
         if not keys:
@@ -380,9 +390,7 @@ class IZoneCoordinator(DataUpdateCoordinator[IZoneData]):
             failed = any(match(k) and now < t for k, t in self._failed.items())
             return c.STATUS_FAILED if failed else c.STATUS_READY
         open_keys = [k for k in keys if k in self._wants]
-        sent = sum(
-            1 for k in keys if k not in self._wants or self._wants[k].sent_at
-        )
+        sent = sum(1 for k in keys if k not in self._wants or self._wants[k].sent_at)
         if all(self._wants[k].sent_at for k in open_keys):
             return c.STATUS_CONFIRMING
         if not sent:
@@ -502,7 +510,9 @@ class IZoneCoordinator(DataUpdateCoordinator[IZoneData]):
                 _LOGGER.info(
                     "%s was changed elsewhere to %r while %r was being applied; "
                     "keeping the newer change",
-                    self._describe(key), actual, want.value,
+                    self._describe(key),
+                    actual,
+                    want.value,
                 )
                 continue
             if now > want.deadline:
@@ -566,7 +576,9 @@ class IZoneCoordinator(DataUpdateCoordinator[IZoneData]):
                 _LOGGER.warning(
                     "%s: the zone's sensor isn't responding; %s=%r will be applied "
                     "when it's back",
-                    self._describe(key), name, want.value,
+                    self._describe(key),
+                    name,
+                    want.value,
                 )
                 want.waiting_for_sensor = True
                 want.deadline = max(want.deadline, now + c.SENSOR_WAIT)

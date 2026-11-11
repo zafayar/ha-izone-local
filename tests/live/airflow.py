@@ -47,17 +47,27 @@ async def main():
         try:
             await zmax.async_set_native_value(90)
             await zmin.async_set_native_value(10)
-            check("set to 10/90", (zmin.native_value, zmax.native_value) == (10, 90),
-                  (zmin.native_value, zmax.native_value))
-            check("AC and zone modes unchanged", (await snap(client)) == before,
-                  await snap(client))
+            check(
+                "set to 10/90",
+                (zmin.native_value, zmax.native_value) == (10, 90),
+                (zmin.native_value, zmax.native_value),
+            )
+            check(
+                "AC and zone modes unchanged",
+                (await snap(client)) == before,
+                await snap(client),
+            )
         finally:
             await zmin.async_set_native_value(orig[0])
             await zmax.async_set_native_value(orig[1])
             await asyncio.sleep(10)
             await co.async_refresh()
-            check("restored", (zmin.native_value, zmax.native_value) == orig
-                  and (await snap(client)) == before, (zmin.native_value, zmax.native_value))
+            check(
+                "restored",
+                (zmin.native_value, zmax.native_value) == orig
+                and (await snap(client)) == before,
+                (zmin.native_value, zmax.native_value),
+            )
     print("\nALL PASSED" if not fails else f"\nFAILED: {fails}")
 
 

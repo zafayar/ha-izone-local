@@ -69,6 +69,7 @@ HVAC_TO_ZONE_MODE = {
     HVACMode.AUTO: c.ZONE_MODE_AUTO,
 }
 
+
 class _TemperatureLimits:
     """The setpoint range: the eco-lock limits while the lock is on."""
 
@@ -148,7 +149,9 @@ class IZoneSystemClimate(_TemperatureLimits, IZoneEntity, ClimateEntity):
     @property
     def fan_modes(self) -> list[str]:
         """The speeds this unit's fan has (e.g. no "top" on a 3-speed fan)."""
-        return [SYS_FAN_TO_HA[fan] for fan in c.fan_speeds(self.coordinator.data.system)]
+        return [
+            SYS_FAN_TO_HA[fan] for fan in c.fan_speeds(self.coordinator.data.system)
+        ]
 
     @property
     def current_temperature(self) -> float | None:
@@ -353,7 +356,8 @@ class IZoneZoneClimate(_TemperatureLimits, IZoneZoneEntity, ClimateEntity):
                 # temperature, so honour the mode and skip the temperature.
                 _LOGGER.warning(
                     "%s: set to %s; a temperature only applies in auto",
-                    self.entity_id, hvac_mode,
+                    self.entity_id,
+                    hvac_mode,
                 )
                 await self.async_set_hvac_mode(hvac_mode)
                 return

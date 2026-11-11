@@ -62,35 +62,79 @@ async def main():
         zone = {co.data.zones[e.index]["Name"]: e for e in ents[1:]}
         orig_sys = {k: co.data.system[k] for k in ("SysOn", "SysMode", "SysFan")}
         orig_z = {i: (z["Mode"], z["Setpoint"]) for i, z in co.data.zones.items()}
-        print("original:", orig_sys, {co.data.zones[i]["Name"]: v for i, v in orig_z.items()})
+        print(
+            "original:",
+            orig_sys,
+            {co.data.zones[i]["Name"]: v for i, v in orig_z.items()},
+        )
         try:
             if co.data.system["SysOn"]:
                 await ac.async_turn_off()
 
             first, _, _ = await timed(
-                "Master on (AC off)", zone["Master"].async_turn_on(), ac, zone, zone["Master"])
-            check("Master on: shown at once as auto with the AC on",
-                  first["Master"] == "auto" and first["AC"] != "off", first)
-            check("Master on: the bridge confirms, status ready",
-                  co.data.system["SysOn"] == 1 and zone["Master"].status == "ready"
-                  and not co._wants, (co._wants, zone["Master"].status))
+                "Master on (AC off)",
+                zone["Master"].async_turn_on(),
+                ac,
+                zone,
+                zone["Master"],
+            )
+            check(
+                "Master on: shown at once as auto with the AC on",
+                first["Master"] == "auto" and first["AC"] != "off",
+                first,
+            )
+            check(
+                "Master on: the bridge confirms, status ready",
+                co.data.system["SysOn"] == 1
+                and zone["Master"].status == "ready"
+                and not co._wants,
+                (co._wants, zone["Master"].status),
+            )
 
             first, _, _ = await timed(
-                "Upstairs on (AC on)", zone["Upstairs"].async_turn_on(), ac, zone, zone["Upstairs"])
-            check("Upstairs on: confirmed", str(zone["Upstairs"].hvac_mode) == "auto"
-                  and zone["Upstairs"].status == "ready", zone["Upstairs"].status)
+                "Upstairs on (AC on)",
+                zone["Upstairs"].async_turn_on(),
+                ac,
+                zone,
+                zone["Upstairs"],
+            )
+            check(
+                "Upstairs on: confirmed",
+                str(zone["Upstairs"].hvac_mode) == "auto"
+                and zone["Upstairs"].status == "ready",
+                zone["Upstairs"].status,
+            )
 
             first, _, _ = await timed(
-                "Master off (Upstairs still on)", zone["Master"].async_turn_off(), ac, zone,
-                zone["Master"])
-            check("Master off: the AC stays on", co.data.system["SysOn"] == 1, co.data.system["SysOn"])
+                "Master off (Upstairs still on)",
+                zone["Master"].async_turn_off(),
+                ac,
+                zone,
+                zone["Master"],
+            )
+            check(
+                "Master off: the AC stays on",
+                co.data.system["SysOn"] == 1,
+                co.data.system["SysOn"],
+            )
 
             first, _, _ = await timed(
-                "Upstairs off (last zone)", zone["Upstairs"].async_turn_off(), ac, zone,
-                zone["Upstairs"])
-            check("Last zone off: shown at once with the AC off", first["AC"] == "off", first)
-            check("Last zone off: the bridge confirms the AC off",
-                  co.data.system["SysOn"] == 0 and ac.status == "ready", ac.status)
+                "Upstairs off (last zone)",
+                zone["Upstairs"].async_turn_off(),
+                ac,
+                zone,
+                zone["Upstairs"],
+            )
+            check(
+                "Last zone off: shown at once with the AC off",
+                first["AC"] == "off",
+                first,
+            )
+            check(
+                "Last zone off: the bridge confirms the AC off",
+                co.data.system["SysOn"] == 0 and ac.status == "ready",
+                ac.status,
+            )
         finally:
             print("\nrestoring...")
             await asyncio.sleep(1)
@@ -115,7 +159,11 @@ async def main():
             await co.async_refresh()
             now_sys = {k: co.data.system[k] for k in orig_sys}
             now_z = {i: (z["Mode"], z["Setpoint"]) for i, z in co.data.zones.items()}
-            check("restored", now_sys == orig_sys and now_z == orig_z, f"{now_sys} {now_z}")
+            check(
+                "restored",
+                now_sys == orig_sys and now_z == orig_z,
+                f"{now_sys} {now_z}",
+            )
     print("\nALL PASSED" if not fails else f"\nFAILED: {fails}")
 
 

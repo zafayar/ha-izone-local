@@ -82,9 +82,7 @@ def sleep_timer_option(minutes: int | None) -> str:
     left shows as 6 h), or off."""
     if not minutes:
         return "off"
-    return next(
-        (o for o, m in SLEEP_TIMER_OPTIONS.items() if m >= minutes), "12h"
-    )
+    return next((o for o, m in SLEEP_TIMER_OPTIONS.items() if m >= minutes), "12h")
 
 
 # Progress shown in each entity's "status" attribute, with its icon.
@@ -137,6 +135,7 @@ def fan_speeds(system: dict) -> list[int]:
         return [FAN_LOW, FAN_MED, FAN_HIGH]
     default = (FAN_LOW, FAN_MED, FAN_HIGH, FAN_AUTO, FAN_TOP)  # unknown: all
     return list(_FAN_SPEEDS.get(system.get("FanAutoType"), default))
+
 
 # ZoneMode_e
 ZONE_MODE_OPEN = 1
@@ -194,6 +193,7 @@ def zeroed_reply(system: dict, zones: Iterable[dict] = ()) -> bool:
     return (system.get("SysMode") == 0 and system.get("SysFan") == 0) or any(
         zone.get("Mode") == 0 for zone in zones
     )
+
 
 # CtrlZone value meaning "the unit's own setpoint is in control"
 CTRL_ZONE_UNIT = 15

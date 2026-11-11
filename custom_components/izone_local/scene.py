@@ -167,7 +167,9 @@ class IZoneFavouriteScene(IZoneEntity, Scene):
         the favourite back, and what didn't stick is sent again.
         """
         if zone is None and (zone_mode is not None or temperature is not None):
-            raise ServiceValidationError(translation_domain=c.DOMAIN, translation_key="zone_settings_need_zone")
+            raise ServiceValidationError(
+                translation_domain=c.DOMAIN, translation_key="zone_settings_need_zone"
+            )
         if zone is not None and zone_mode is None and temperature is None:
             raise ServiceValidationError(
                 translation_domain=c.DOMAIN,
@@ -175,7 +177,9 @@ class IZoneFavouriteScene(IZoneEntity, Scene):
                 translation_placeholders={"zone": zone},
             )
         if zone is None and fan is None and mode is None:
-            raise ServiceValidationError(translation_domain=c.DOMAIN, translation_key="nothing_to_change")
+            raise ServiceValidationError(
+                translation_domain=c.DOMAIN, translation_key="nothing_to_change"
+            )
 
         client = self.coordinator.client
         try:
@@ -267,7 +271,9 @@ class IZoneFavouriteScene(IZoneEntity, Scene):
         zones[index] = {
             "Mode": new_mode,
             "Setpoint": (
-                zones[index]["Setpoint"] if temperature is None else to_centi(temperature)
+                zones[index]["Setpoint"]
+                if temperature is None
+                else to_centi(temperature)
             ),
         }
         return index, zones
@@ -299,7 +305,9 @@ class IZoneFavouriteScene(IZoneEntity, Scene):
                 try:
                     await send()
                 except IZoneError as err:
-                    _LOGGER.debug("%s: %s (checking the read-back)", self._attr_name, err)
+                    _LOGGER.debug(
+                        "%s: %s (checking the read-back)", self._attr_name, err
+                    )
                     last_error = err
                 await asyncio.sleep(c.FAVOURITE_EDIT_GAP)
             try:

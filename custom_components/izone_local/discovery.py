@@ -55,5 +55,9 @@ def async_start_discovery(hass: HomeAssistant) -> None:
 
     async_at_started(hass, started)
     async_track_time_interval(
-        hass, scan, DISCOVERY_INTERVAL, name=f"{DOMAIN} discovery", cancel_on_shutdown=True
+        hass,
+        scan,
+        DISCOVERY_INTERVAL,
+        name=f"{DOMAIN} discovery",
+        cancel_on_shutdown=True,
     )

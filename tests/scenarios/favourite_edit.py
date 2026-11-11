@@ -25,17 +25,55 @@ from izone_local.coordinator import IZoneCoordinator
 api.COMMAND_GAP = 0.01
 c.FAVOURITE_EDIT_GAP = 0.05
 
-SYS = {"SysOn": 0, "SysMode": 2, "SysFan": 4, "NoOfZones": 4, "CtrlZone": 15,
-       "FanAutoEn": 1, "FanAutoType": 1}  # 3-speed with auto: no top
+SYS = {
+    "SysOn": 0,
+    "SysMode": 2,
+    "SysFan": 4,
+    "NoOfZones": 4,
+    "CtrlZone": 15,
+    "FanAutoEn": 1,
+    "FanAutoType": 1,
+}  # 3-speed with auto: no top
 Z = [
-    {"Index": 0, "Name": "Living", "ZoneType": 3, "SensType": 0, "Mode": 2, "Setpoint": 2100},
-    {"Index": 1, "Name": "Master", "ZoneType": 3, "SensType": 0, "Mode": 2, "Setpoint": 2300},
-    {"Index": 2, "Name": "Hall", "ZoneType": 1, "SensType": 255, "Mode": 2, "Setpoint": 0},
-    {"Index": 3, "Name": "Bypass", "ZoneType": 2, "SensType": 255, "Mode": 5, "Setpoint": 0,
-     "Bypass": 1},
+    {
+        "Index": 0,
+        "Name": "Living",
+        "ZoneType": 3,
+        "SensType": 0,
+        "Mode": 2,
+        "Setpoint": 2100,
+    },
+    {
+        "Index": 1,
+        "Name": "Master",
+        "ZoneType": 3,
+        "SensType": 0,
+        "Mode": 2,
+        "Setpoint": 2300,
+    },
+    {
+        "Index": 2,
+        "Name": "Hall",
+        "ZoneType": 1,
+        "SensType": 255,
+        "Mode": 2,
+        "Setpoint": 0,
+    },
+    {
+        "Index": 3,
+        "Name": "Bypass",
+        "ZoneType": 2,
+        "SensType": 255,
+        "Mode": 5,
+        "Setpoint": 0,
+        "Bypass": 1,
+    },
 ]
-ZONES = [{"Mode": 2, "Setpoint": 2300}, {"Mode": 3, "Setpoint": 2200},
-         {"Mode": 1, "Setpoint": 2300}] + [{"Mode": 1, "Setpoint": 2300}] * 11
+ZONES = [
+    {"Mode": 2, "Setpoint": 2300},
+    {"Mode": 3, "Setpoint": 2200},
+    {"Mode": 1, "Setpoint": 2300},
+] + [{"Mode": 1, "Setpoint": 2300}] * 11
 FAV = {"Name": "Evening", "Mode": 0, "Fan": 0, "Zones": copy.deepcopy(ZONES)}
 # "error": reply {ERROR} but keep it; "drop": ignore this many edits; "never".
 B = {"error": False, "drop": 0, "never": False}
@@ -51,11 +89,16 @@ def check(name, cond, detail=""):
 async def req(r):
     b = (await r.json())["iZoneV2Request"]
     if b["Type"] == 1:
-        return web.Response(text=json.dumps({"AirStreamDeviceUId": "1", "SystemV2": SYS}))
+        return web.Response(
+            text=json.dumps({"AirStreamDeviceUId": "1", "SystemV2": SYS})
+        )
     if b["Type"] == 3:
         named = b["No"] == 0
-        return web.Response(text=json.dumps(
-            {"SchedulesV2": FAV if named else {"Name": "", "Zones": []}}))
+        return web.Response(
+            text=json.dumps(
+                {"SchedulesV2": FAV if named else {"Name": "", "Zones": []}}
+            )
+        )
     if b["Type"] == 6:
         return web.Response(text="{}")
     return web.Response(text=json.dumps({"ZonesV2": Z[b["No"]]}))
@@ -106,11 +149,16 @@ async def main():
         await scene.async_setup_entry(None, entry, scenes.extend)
         evening = scenes[0]
 
-        schema, method = ha_stubs.platform.services.get("update_favourite", (None, None))
+        schema, method = ha_stubs.platform.services.get(
+            "update_favourite", (None, None)
+        )
         check("action registered on the scenes", method == "async_update_favourite")
         validate = vol.Schema(schema)
-        check("schema: a zone number is taken as text",
-              validate({"zone": 2, "temperature": "21.5"}) == {"zone": "2", "temperature": 21.5})
+        check(
+            "schema: a zone number is taken as text",
+            validate({"zone": 2, "temperature": "21.5"})
+            == {"zone": "2", "temperature": 21.5},
+        )
         for bad in ({"temperature": 31}, {"fan": "turbo"}, {"zone_mode": "override"}):
             try:
                 validate(bad)
@@ -122,30 +170,51 @@ async def main():
         cmds.clear()
         await evening.async_update_favourite(zone="master", temperature=21.5)
         sent = cmds[0].get("SchedZones", {})
-        check("one SchedZones for this favourite with all 14 zones",
-              len(cmds) == 1 and sent.get("Index") == 0 and len(sent.get("Zones", [])) == 14,
-              cmds)
-        check("Master stored as auto 21.5, the others as they were",
-              sent["Zones"][1] == {"Mode": 3, "Setpoint": 2150}
-              and sent["Zones"][:1] + sent["Zones"][2:] == ZONES[:1] + ZONES[2:], sent["Zones"][:3])
-        check("the scene shows the new favourite",
-              evening.extra_state_attributes["zones"]["Master"] == "auto 21.5"
-              and evening.state_writes == 1, evening.extra_state_attributes)
+        check(
+            "one SchedZones for this favourite with all 14 zones",
+            len(cmds) == 1
+            and sent.get("Index") == 0
+            and len(sent.get("Zones", [])) == 14,
+            cmds,
+        )
+        check(
+            "Master stored as auto 21.5, the others as they were",
+            sent["Zones"][1] == {"Mode": 3, "Setpoint": 2150}
+            and sent["Zones"][:1] + sent["Zones"][2:] == ZONES[:1] + ZONES[2:],
+            sent["Zones"][:3],
+        )
+        check(
+            "the scene shows the new favourite",
+            evening.extra_state_attributes["zones"]["Master"] == "auto 21.5"
+            and evening.state_writes == 1,
+            evening.extra_state_attributes,
+        )
 
         # By number; fan and mode in the same call; the fan is already unchanged.
         cmds.clear()
-        await evening.async_update_favourite(zone="1", zone_mode="open", fan="unchanged",
-                                             mode="cool")
-        check("only what differs is sent: the zone and the mode",
-              [next(iter(x)) for x in cmds] == ["SchedZones", "SchedAcMode"], cmds)
-        check("sent 2 s apart (FAVOURITE_EDIT_GAP)",
-              times[-1] - times[-2] >= c.FAVOURITE_EDIT_GAP, times[-2:])
-        check("stored: Living open, mode cool, fan unchanged",
-              FAV["Zones"][0]["Mode"] == 1 and FAV["Mode"] == 1 and FAV["Fan"] == 0)
-        check("attributes: mode cool, fan unchanged, Living open",
-              evening.extra_state_attributes["mode"] == "cool"
-              and evening.extra_state_attributes["fan"] == "unchanged"
-              and evening.extra_state_attributes["zones"]["Living"] == "open")
+        await evening.async_update_favourite(
+            zone="1", zone_mode="open", fan="unchanged", mode="cool"
+        )
+        check(
+            "only what differs is sent: the zone and the mode",
+            [next(iter(x)) for x in cmds] == ["SchedZones", "SchedAcMode"],
+            cmds,
+        )
+        check(
+            "sent 2 s apart (FAVOURITE_EDIT_GAP)",
+            times[-1] - times[-2] >= c.FAVOURITE_EDIT_GAP,
+            times[-2:],
+        )
+        check(
+            "stored: Living open, mode cool, fan unchanged",
+            FAV["Zones"][0]["Mode"] == 1 and FAV["Mode"] == 1 and FAV["Fan"] == 0,
+        )
+        check(
+            "attributes: mode cool, fan unchanged, Living open",
+            evening.extra_state_attributes["mode"] == "cool"
+            and evening.extra_state_attributes["fan"] == "unchanged"
+            and evening.extra_state_attributes["zones"]["Living"] == "open",
+        )
 
         # The controller answers {ERROR} to an edit it keeps: judged by read-back.
         B["error"] = True
@@ -157,8 +226,11 @@ async def main():
         cmds.clear()
         B["drop"] = 1
         await evening.async_update_favourite(fan="low")
-        check("an edit that didn't stick is sent again", FAV["Fan"] == 1
-              and cmds == [{"SchedAcFan": {"Index": 0, "Fan": 1}}] * 2, cmds)
+        check(
+            "an edit that didn't stick is sent again",
+            FAV["Fan"] == 1 and cmds == [{"SchedAcFan": {"Index": 0, "Fan": 1}}] * 2,
+            cmds,
+        )
 
         # It never keeps it.
         cmds.clear()
@@ -167,26 +239,49 @@ async def main():
             await evening.async_update_favourite(mode="heat")
             check("never kept: a clear error after 3 rounds", False)
         except HomeAssistantError as err:
-            check("never kept: a clear error after 3 rounds",
-                  "didn't keep the change to mode" in str(err) and len(cmds) == 3,
-                  (err, len(cmds)))
+            check(
+                "never kept: a clear error after 3 rounds",
+                "didn't keep the change to mode" in str(err) and len(cmds) == 3,
+                (err, len(cmds)),
+            )
         B["never"] = False
 
         for what, coro, words in (
-            ("fan the unit lacks", evening.async_update_favourite(fan="top"),
-             "low, medium, high, auto"),
-            ("auto on an open/close zone",
-             evening.async_update_favourite(zone="Hall", zone_mode="auto"), "only be open or close"),
-            ("a temperature on an open/close zone",
-             evening.async_update_favourite(zone="Hall", temperature=22), "only be open or close"),
-            ("a bypass zone", evening.async_update_favourite(zone="bypass", zone_mode="open"),
-             "run by the system"),
-            ("an unknown zone", evening.async_update_favourite(zone="Garage", zone_mode="open"),
-             "the zones are Living, Master, Hall, Bypass"),
-            ("zone settings without a zone", evening.async_update_favourite(zone_mode="open"),
-             "need a zone"),
-            ("a zone with nothing to set", evening.async_update_favourite(zone="Living"),
-             "zone_mode and/or temperature"),
+            (
+                "fan the unit lacks",
+                evening.async_update_favourite(fan="top"),
+                "low, medium, high, auto",
+            ),
+            (
+                "auto on an open/close zone",
+                evening.async_update_favourite(zone="Hall", zone_mode="auto"),
+                "only be open or close",
+            ),
+            (
+                "a temperature on an open/close zone",
+                evening.async_update_favourite(zone="Hall", temperature=22),
+                "only be open or close",
+            ),
+            (
+                "a bypass zone",
+                evening.async_update_favourite(zone="bypass", zone_mode="open"),
+                "run by the system",
+            ),
+            (
+                "an unknown zone",
+                evening.async_update_favourite(zone="Garage", zone_mode="open"),
+                "the zones are Living, Master, Hall, Bypass",
+            ),
+            (
+                "zone settings without a zone",
+                evening.async_update_favourite(zone_mode="open"),
+                "need a zone",
+            ),
+            (
+                "a zone with nothing to set",
+                evening.async_update_favourite(zone="Living"),
+                "zone_mode and/or temperature",
+            ),
             ("nothing at all", evening.async_update_favourite(), "Nothing to change"),
         ):
             cmds.clear()
@@ -197,14 +292,19 @@ async def main():
     registered = []
     service_helper = sys.modules["homeassistant.helpers.service"]
     service_helper.async_register_platform_entity_service = (
-        lambda hass, domain, name, **kw: registered.append((domain, name, kw)))
+        lambda hass, domain, name, **kw: registered.append((domain, name, kw))
+    )
     services = importlib.reload(importlib.import_module("izone_local.services"))
     services.async_setup_services(None)
-    check("2025.10+: registered on load for the scenes",
-          services.REGISTER_ON_LOAD and len(registered) == 1
-          and registered[0][:2] == ("izone_local", "update_favourite")
-          and registered[0][2]["entity_domain"] == "scene"
-          and registered[0][2]["func"] == "async_update_favourite", registered)
+    check(
+        "2025.10+: registered on load for the scenes",
+        services.REGISTER_ON_LOAD
+        and len(registered) == 1
+        and registered[0][:2] == ("izone_local", "update_favourite")
+        and registered[0][2]["entity_domain"] == "scene"
+        and registered[0][2]["func"] == "async_update_favourite",
+        registered,
+    )
     del service_helper.async_register_platform_entity_service
     await runner.cleanup()
     print("\nALL PASSED" if not fails else f"\nFAILED: {fails}")

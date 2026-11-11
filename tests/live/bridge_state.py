@@ -1,12 +1,15 @@
 """Snapshot and robust restore of the bridge's AC + zone state (for live tests)."""
+
 import asyncio
 
 
 async def snap(c):
     _, s = await c.get_system()
     zones = [await c.get_zone(i) for i in range(s["NoOfZones"])]
-    return ((s["SysOn"], s["SysMode"], s["SysFan"]),
-            [(z["Mode"], z["Setpoint"], bool(z.get("Bypass"))) for z in zones])
+    return (
+        (s["SysOn"], s["SysMode"], s["SysFan"]),
+        [(z["Mode"], z["Setpoint"], bool(z.get("Bypass"))) for z in zones],
+    )
 
 
 async def _wait(c, i, field, value, tries=20):

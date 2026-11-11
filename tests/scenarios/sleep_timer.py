@@ -28,8 +28,15 @@ c.CONFIRM_INTERVAL = 0.02
 c.SLEEP_TIMER_SETTLE = 0.3
 SHOW_AFTER = 0.15  # longer than RESEND_AFTER would allow other changes
 
-SYS = {"SysOn": 1, "SysMode": 1, "SysFan": 1, "NoOfZones": 0, "CtrlZone": 15,
-       "SleepTimer": 0, "SleepTimerM": 0}
+SYS = {
+    "SysOn": 1,
+    "SysMode": 1,
+    "SysFan": 1,
+    "NoOfZones": 0,
+    "CtrlZone": 15,
+    "SleepTimer": 0,
+    "SleepTimerM": 0,
+}
 B = {"ignore": 0, "error": False, "tick": False}
 cmds, fails = [], []
 
@@ -73,9 +80,14 @@ async def cmd(r):
 
 
 async def main():
-    check("panel steps, rounded up",
-          [c.sleep_timer_option(m) for m in (0, None, 1, 29, 30, 31, 59, 241, 359, 719, 900)]
-          == ["off", "off", "30m", "30m", "30m", "1h", "1h", "6h", "6h", "12h", "12h"])
+    check(
+        "panel steps, rounded up",
+        [
+            c.sleep_timer_option(m)
+            for m in (0, None, 1, 29, 30, 31, 59, 241, 359, 719, 900)
+        ]
+        == ["off", "off", "30m", "30m", "30m", "1h", "1h", "6h", "6h", "12h", "12h"],
+    )
 
     app = web.Application()
     app.router.add_post("/iZoneRequestV2", req)
@@ -98,22 +110,38 @@ async def main():
         end = next(e for e in sens if isinstance(e, sensor.IZoneSleepTimerEndSensor))
         now = [datetime(2026, 10, 23, 21, 0, tzinfo=UTC)]
         sensor.dt_util.utcnow = lambda: now[0]
-        check("end sensor: a timestamp, unknown with no timer",
-              end.unique_id == "1_sleep_timer_end" and end._attr_device_class == "timestamp"
-              and end.native_value is None)
-        check("one select, the panel's options",
-              timer.unique_id == "1_sleep_timer"
-              and timer.options == ["off", "30m", "1h", "2h", "4h", "6h", "8h", "12h"]
-              and timer.current_option == "off")
+        check(
+            "end sensor: a timestamp, unknown with no timer",
+            end.unique_id == "1_sleep_timer_end"
+            and end._attr_device_class == "timestamp"
+            and end.native_value is None,
+        )
+        check(
+            "one select, the panel's options",
+            timer.unique_id == "1_sleep_timer"
+            and timer.options == ["off", "30m", "1h", "2h", "4h", "6h", "8h", "12h"]
+            and timer.current_option == "off",
+        )
 
         await timer.async_select_option("1h")
-        check("1 hour: sent once, though it shows late",
-              cmds == [{"SysSleepTimer": 60}], cmds)
-        check("shown from the minutes left",
-              timer.current_option == "1h" and timer.extra_state_attributes["minutes_left"] == 59
-              and timer.status == c.STATUS_READY, timer.extra_state_attributes)
+        check(
+            "1 hour: sent once, though it shows late",
+            cmds == [{"SysSleepTimer": 60}],
+            cmds,
+        )
+        check(
+            "shown from the minutes left",
+            timer.current_option == "1h"
+            and timer.extra_state_attributes["minutes_left"] == 59
+            and timer.status == c.STATUS_READY,
+            timer.extra_state_attributes,
+        )
         first = end.native_value
-        check("end time from the minutes left", first == now[0] + timedelta(minutes=59), first)
+        check(
+            "end time from the minutes left",
+            first == now[0] + timedelta(minutes=59),
+            first,
+        )
         now[0] += timedelta(seconds=50)
         check("steady between countdown steps", end.native_value == first)
         SYS["SleepTimerM"] = 58
@@ -126,15 +154,26 @@ async def main():
         B["tick"], B["ignore"] = True, 1
         await timer.async_select_option("4h")
         B["tick"] = False
-        check("a new timer moves the end time",
-              end.native_value == now[0] + timedelta(minutes=239), end.native_value)
-        check("re-sent after the countdown moved",
-              cmds == [{"SysSleepTimer": 240}] * 2 and timer.current_option == "4h", cmds)
+        check(
+            "a new timer moves the end time",
+            end.native_value == now[0] + timedelta(minutes=239),
+            end.native_value,
+        )
+        check(
+            "re-sent after the countdown moved",
+            cmds == [{"SysSleepTimer": 240}] * 2 and timer.current_option == "4h",
+            cmds,
+        )
 
         cmds.clear()
         await timer.async_select_option("off")
-        check("off cancels it", cmds == [{"SysSleepTimer": 0}]
-              and timer.current_option == "off" and SYS["SleepTimer"] == 240, cmds)
+        check(
+            "off cancels it",
+            cmds == [{"SysSleepTimer": 0}]
+            and timer.current_option == "off"
+            and SYS["SleepTimer"] == 240,
+            cmds,
+        )
 
         # A change on the wall panel while ours is still being applied wins.
         cmds.clear()
@@ -144,8 +183,11 @@ async def main():
         SYS["SleepTimerM"] = 480
         await task
         B["ignore"] = 0
-        check("a change on the panel meanwhile wins, without an error",
-              timer.current_option == "8h" and len(cmds) < 3, cmds)
+        check(
+            "a change on the panel meanwhile wins, without an error",
+            timer.current_option == "8h" and len(cmds) < 3,
+            cmds,
+        )
 
         cmds.clear()
         B["error"] = True
@@ -155,14 +197,20 @@ async def main():
         except HomeAssistantError as err:
             raised = err
         B["error"] = False
-        check("{ERROR} raises", raised is not None and "SysSleepTimer" in str(raised), raised)
+        check(
+            "{ERROR} raises",
+            raised is not None and "SysSleepTimer" in str(raised),
+            raised,
+        )
 
         # With the AC off: turning it off ended the timer, whatever the bridge
         # still reports.
         SYS["SysOn"], SYS["SleepTimerM"] = 0, 12
         await co.async_refresh()
-        check("AC off: shown as off", timer.current_option == "off"
-              and end.native_value is None)
+        check(
+            "AC off: shown as off",
+            timer.current_option == "off" and end.native_value is None,
+        )
         cmds.clear()
         await timer.async_select_option("off")
         check("AC off, choose off: nothing sent", cmds == [], cmds)
@@ -170,9 +218,14 @@ async def main():
         SYS["SleepTimerM"] = 0
         await co.async_refresh()
         await timer.async_select_option("30m")
-        check("AC off, choose 30 min: one command turns it on for 30 min",
-              cmds == [{"SysSleepTimer": 30}] and SYS["SysOn"] == 1
-              and co.system_view()["SysOn"] == 1 and timer.current_option == "30m", cmds)
+        check(
+            "AC off, choose 30 min: one command turns it on for 30 min",
+            cmds == [{"SysSleepTimer": 30}]
+            and SYS["SysOn"] == 1
+            and co.system_view()["SysOn"] == 1
+            and timer.current_option == "30m",
+            cmds,
+        )
     await runner.cleanup()
     print("\nALL PASSED" if not fails else f"\nFAILED: {fails}")
     sys.exit(1 if fails else 0)

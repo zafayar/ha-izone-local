@@ -25,25 +25,70 @@ c.CONFIRM_INTERVAL = 0.03
 c.RESEND_AFTER = 0.4
 c.FAVOURITE_SETTLE = 0.6
 
-SYS = {"SysOn": 0, "SysMode": 2, "SysFan": 4, "Setpoint": 2200, "Temp": 2200,
-       "CtrlZone": 15, "NoOfZones": 4, "OemMake": 8, "AcUnitBrand": 26, "Tag1": "Ghar"}
+SYS = {
+    "SysOn": 0,
+    "SysMode": 2,
+    "SysFan": 4,
+    "Setpoint": 2200,
+    "Temp": 2200,
+    "CtrlZone": 15,
+    "NoOfZones": 4,
+    "OemMake": 8,
+    "AcUnitBrand": 26,
+    "Tag1": "Ghar",
+}
 Z = [
-    {"Index": 0, "Name": "Living", "ZoneType": 3, "SensType": 0, "Mode": 3, "Setpoint": 2100},
-    {"Index": 1, "Name": "Master", "ZoneType": 3, "SensType": 0, "Mode": 2, "Setpoint": 2300},
-    {"Index": 2, "Name": "Upstairs", "ZoneType": 3, "SensType": 0, "Mode": 2, "Setpoint": 2200},
-    {"Index": 3, "Name": "Bypass", "ZoneType": 2, "SensType": 255, "Mode": 2, "Setpoint": 2300,
-     "Bypass": 1, "SensorFault": 1},
+    {
+        "Index": 0,
+        "Name": "Living",
+        "ZoneType": 3,
+        "SensType": 0,
+        "Mode": 3,
+        "Setpoint": 2100,
+    },
+    {
+        "Index": 1,
+        "Name": "Master",
+        "ZoneType": 3,
+        "SensType": 0,
+        "Mode": 2,
+        "Setpoint": 2300,
+    },
+    {
+        "Index": 2,
+        "Name": "Upstairs",
+        "ZoneType": 3,
+        "SensType": 0,
+        "Mode": 2,
+        "Setpoint": 2200,
+    },
+    {
+        "Index": 3,
+        "Name": "Bypass",
+        "ZoneType": 2,
+        "SensType": 255,
+        "Mode": 2,
+        "Setpoint": 2300,
+        "Bypass": 1,
+        "SensorFault": 1,
+    },
 ]
 
 
 def fav(name, mode, fan, zones):
     zones = zones + [(1, 2300)] * (14 - len(zones))
-    return {"Name": name + "\x00\xff", "Mode": mode, "Fan": fan,
-            "Zones": [{"Mode": m, "Setpoint": s} for m, s in zones]}
+    return {
+        "Name": name + "\x00\xff",
+        "Mode": mode,
+        "Fan": fan,
+        "Zones": [{"Mode": m, "Setpoint": s} for m, s in zones],
+    }
 
 
-FAVS = [fav("Favourite 1", 2, 2, [(1, 2300)] * 4),
-        fav("Get Ready", 0, 0, [(2, 2300), (3, 2200), (3, 2400), (2, 2300)])]
+FAVS = [
+    fav("Favourite 1", 2, 2, [(1, 2300)] * 4),
+    fav("Get Ready", 0, 0, [(2, 2300), (3, 2200), (3, 2400), (2, 2300)]),
+]
 FAVS += [{"Name": "", "Zones": []}] * 7
 cmds, fails = [], []
 T = {"fav": None}
@@ -59,7 +104,9 @@ def check(name, cond, detail=""):
 async def req(r):
     b = (await r.json())["iZoneV2Request"]
     if b["Type"] == 1:
-        return web.Response(text=json.dumps({"AirStreamDeviceUId": "1", "SystemV2": SYS}))
+        return web.Response(
+            text=json.dumps({"AirStreamDeviceUId": "1", "SystemV2": SYS})
+        )
     if b["Type"] == 3:
         return web.Response(text=json.dumps({"SchedulesV2": FAVS[b["No"]]}))
     zone = Z[b["No"]]
@@ -114,16 +161,32 @@ async def main():
         scenes = []
         await scene.async_setup_entry(None, entry, scenes.extend)
         names = {e._attr_name: e for e in scenes}
-        check("one scene per named favourite; padding stripped",
-              list(names) == ["Favourite 1", "Get Ready"], list(names))
-        check("default-named slot disabled, custom one enabled",
-              not names["Favourite 1"]._attr_entity_registry_enabled_default
-              and names["Get Ready"]._attr_entity_registry_enabled_default)
+        check(
+            "one scene per named favourite; padding stripped",
+            list(names) == ["Favourite 1", "Get Ready"],
+            list(names),
+        )
+        check(
+            "default-named slot disabled, custom one enabled",
+            not names["Favourite 1"]._attr_entity_registry_enabled_default
+            and names["Get Ready"]._attr_entity_registry_enabled_default,
+        )
         attrs = names["Get Ready"].extra_state_attributes
-        check("attributes describe the favourite", attrs == {
-            "favourite_number": 2, "mode": "unchanged", "fan": "unchanged",
-            "zones": {"Living": "close", "Master": "auto 22.0", "Upstairs": "auto 24.0"}},
-            attrs)
+        check(
+            "attributes describe the favourite",
+            attrs
+            == {
+                "favourite_number": 2,
+                "mode": "unchanged",
+                "fan": "unchanged",
+                "zones": {
+                    "Living": "close",
+                    "Master": "auto 22.0",
+                    "Upstairs": "auto 24.0",
+                },
+            },
+            attrs,
+        )
 
         async def settled(limit=5):
             for _ in range(int(limit / 0.02)):
@@ -137,17 +200,30 @@ async def main():
         T["times"] = []
         t0 = asyncio.get_running_loop().time()
         await names["Get Ready"].async_activate()
-        check("activation returns once the favourite is accepted",
-              asyncio.get_running_loop().time() - t0 < 0.3 and cmds == [{"FavouriteSet": 2}],
-              cmds)
+        check(
+            "activation returns once the favourite is accepted",
+            asyncio.get_running_loop().time() - t0 < 0.3
+            and cmds == [{"FavouriteSet": 2}],
+            cmds,
+        )
         check("follow-through finishes in the background", await settled())
-        check("FavouriteSet sent, then only the zone it missed",
-              cmds == [{"FavouriteSet": 2}, {"ZoneMode": {"Index": 0, "Mode": 2}}], cmds)
-        check("the follow-up waited for the favourite to settle",
-              len(T["times"]) == 2 and T["times"][1] - T["fav"] >= 0.6, T["times"])
-        check("result: AC on, Living closed, Master 22, Upstairs 24",
-              SYS["SysOn"] == 1 and [(z["Mode"], z["Setpoint"]) for z in Z[:3]]
-              == [(2, 2100), (3, 2200), (3, 2400)], (SYS["SysOn"], Z[:3]))
+        check(
+            "FavouriteSet sent, then only the zone it missed",
+            cmds == [{"FavouriteSet": 2}, {"ZoneMode": {"Index": 0, "Mode": 2}}],
+            cmds,
+        )
+        check(
+            "the follow-up waited for the favourite to settle",
+            len(T["times"]) == 2 and T["times"][1] - T["fav"] >= 0.6,
+            T["times"],
+        )
+        check(
+            "result: AC on, Living closed, Master 22, Upstairs 24",
+            SYS["SysOn"] == 1
+            and [(z["Mode"], z["Setpoint"]) for z in Z[:3]]
+            == [(2, 2100), (3, 2200), (3, 2400)],
+            (SYS["SysOn"], Z[:3]),
+        )
         check("nothing left pending", not co._wants, co._wants)
 
         # A favourite needing a zone whose sensor is out: applied zone by zone.
@@ -159,14 +235,19 @@ async def main():
         cmds.clear()
         await names["Get Ready"].async_activate()
         await settled()
-        check("faulted Auto zone: no FavouriteSet, other zones sent directly",
-              {"FavouriteSet": 2} not in cmds
-              and {"ZoneMode": {"Index": 0, "Mode": 2}} in cmds
-              and {"ZoneMode": {"Index": 2, "Mode": 3}} in cmds
-              and not any(x.get("ZoneMode", {}).get("Index") == 1 for x in cmds), cmds)
-        check("faulted zone waits for its sensor",
-              co._wants.get((1, "Mode")) and co._wants[(1, "Mode")].waiting_for_sensor,
-              co._wants)
+        check(
+            "faulted Auto zone: no FavouriteSet, other zones sent directly",
+            {"FavouriteSet": 2} not in cmds
+            and {"ZoneMode": {"Index": 0, "Mode": 2}} in cmds
+            and {"ZoneMode": {"Index": 2, "Mode": 3}} in cmds
+            and not any(x.get("ZoneMode", {}).get("Index") == 1 for x in cmds),
+            cmds,
+        )
+        check(
+            "faulted zone waits for its sensor",
+            co._wants.get((1, "Mode")) and co._wants[(1, "Mode")].waiting_for_sensor,
+            co._wants,
+        )
     await runner.cleanup()
     print("\nALL PASSED" if not fails else f"\nFAILED: {fails}")
     sys.exit(1 if fails else 0)

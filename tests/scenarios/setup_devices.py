@@ -49,8 +49,17 @@ class Registry:
     def _find(self, identifiers):
         return next((d for d in self.devices if d.identifiers & identifiers), None)
 
-    def async_get_or_create(self, *, config_entry_id, identifiers, via_device=None,
-                            via_device_id=None, name=None, sw_version=None, **_):
+    def async_get_or_create(
+        self,
+        *,
+        config_entry_id,
+        identifiers,
+        via_device=None,
+        via_device_id=None,
+        name=None,
+        sw_version=None,
+        **_,
+    ):
         if via_device is not None:
             self.deprecated.append(identifiers)
         device = self._find(identifiers)
@@ -66,8 +75,9 @@ class Registry:
     def async_get_device(self, identifiers):
         return self._find(identifiers)
 
-    def async_update_device(self, device_id, *, via_device_id=None,
-                            remove_config_entry_id=None):
+    def async_update_device(
+        self, device_id, *, via_device_id=None, remove_config_entry_id=None
+    ):
         device = next(d for d in self.devices if d.id == device_id)
         if via_device_id is not None:
             device.via_device_id = via_device_id
@@ -87,13 +97,45 @@ sys.modules["homeassistant.helpers.aiohttp_client"].async_get_clientsession = (
     lambda hass: SESSION["session"]
 )
 
-SYS = {"SysOn": 0, "SysMode": 2, "SysFan": 4, "Setpoint": 2200, "Temp": 2200,
-       "CtrlZone": 15, "NoOfZones": 3, "OemMake": 8, "AcUnitBrand": 26, "Tag1": "Ghar"}
+SYS = {
+    "SysOn": 0,
+    "SysMode": 2,
+    "SysFan": 4,
+    "Setpoint": 2200,
+    "Temp": 2200,
+    "CtrlZone": 15,
+    "NoOfZones": 3,
+    "OemMake": 8,
+    "AcUnitBrand": 26,
+    "Tag1": "Ghar",
+}
 Z = [
-    {"Index": 0, "Name": "Living", "ZoneType": 3, "SensType": 0, "Mode": 3, "Setpoint": 2100},
-    {"Index": 1, "Name": "Master", "ZoneType": 3, "SensType": 3, "Mode": 2, "Setpoint": 2300},
-    {"Index": 2, "Name": "Bypass", "ZoneType": 2, "SensType": 255, "Mode": 2, "Setpoint": 0,
-     "Bypass": 1, "SensorFault": 1},
+    {
+        "Index": 0,
+        "Name": "Living",
+        "ZoneType": 3,
+        "SensType": 0,
+        "Mode": 3,
+        "Setpoint": 2100,
+    },
+    {
+        "Index": 1,
+        "Name": "Master",
+        "ZoneType": 3,
+        "SensType": 3,
+        "Mode": 2,
+        "Setpoint": 2300,
+    },
+    {
+        "Index": 2,
+        "Name": "Bypass",
+        "ZoneType": 2,
+        "SensType": 255,
+        "Mode": 2,
+        "Setpoint": 0,
+        "Bypass": 1,
+        "SensorFault": 1,
+    },
 ]
 
 
@@ -101,9 +143,13 @@ async def req(r):
     b = (await r.json())["iZoneV2Request"]
     if b["Type"] == 1:
         SYSTEM_READS.append(1)
-        return web.Response(text=json.dumps({"AirStreamDeviceUId": "000012345", "SystemV2": SYS}))
+        return web.Response(
+            text=json.dumps({"AirStreamDeviceUId": "000012345", "SystemV2": SYS})
+        )
     if b["Type"] == 6:
-        return web.Response(text=json.dumps({"Fmw": "COCB-2F5 4.36 (000000042),CR 3.23"}))
+        return web.Response(
+            text=json.dumps({"Fmw": "COCB-2F5 4.36 (000000042),CR 3.23"})
+        )
     if b["Type"] == 3:
         return web.Response(text=json.dumps({"SchedulesV2": {"Name": "", "Zones": []}}))
     return web.Response(text=json.dumps({"ZonesV2": Z[b["No"]]}))
@@ -140,9 +186,13 @@ async def setup(session, host):
         UNLOADED.append(list(platforms))
         return True
 
-    hass = SimpleNamespace(config_entries=SimpleNamespace(
-        async_forward_entry_setups=forward, async_reload=reload,
-        async_unload_platforms=unload_platforms))
+    hass = SimpleNamespace(
+        config_entries=SimpleNamespace(
+            async_forward_entry_setups=forward,
+            async_reload=reload,
+            async_unload_platforms=unload_platforms,
+        )
+    )
     await integration.async_setup(hass, {})
     ok = await integration.async_setup_entry(hass, entry)
 
@@ -178,37 +228,72 @@ async def main():
     host = f"127.0.0.1:{site._server.sockets[0].getsockname()[1]}"
     async with aiohttp.ClientSession() as s:
         # A zone that has since been taken out of the system.
-        REGISTRY.async_get_or_create(config_entry_id="entry1",
-                                     identifiers={("izone_local", "000012345_zone7")})
+        REGISTRY.async_get_or_create(
+            config_entry_id="entry1", identifiers={("izone_local", "000012345_zone7")}
+        )
         check("setup succeeds", await setup(s, host) is True)
-        check("a zone the bridge no longer reports is removed",
-              REGISTRY.async_get_device({("izone_local", "000012345_zone7")}) is None)
+        check(
+            "a zone the bridge no longer reports is removed",
+            REGISTRY.async_get_device({("izone_local", "000012345_zone7")}) is None,
+        )
         ac = REGISTRY.async_get_device({("izone_local", "000012345")})
-        zones = [REGISTRY.async_get_device({("izone_local", f"000012345_zone{i}")})
-                 for i in range(3)]
-        check("no deprecated via_device used", not REGISTRY.deprecated, REGISTRY.deprecated)
-        check("AC device registered, named from Tag1", ac is not None and ac.name == "Ghar",
-              ac and ac.name)
-        check("every zone device linked to the AC by device ID",
-              all(z is not None and z.via_device_id == ac.id for z in zones),
-              [(z and z.via_device_id) for z in zones])
-        check("a change broadcast from the bridge triggers a read", BROADCAST[0], BROADCAST)
+        zones = [
+            REGISTRY.async_get_device({("izone_local", f"000012345_zone{i}")})
+            for i in range(3)
+        ]
+        check(
+            "no deprecated via_device used",
+            not REGISTRY.deprecated,
+            REGISTRY.deprecated,
+        )
+        check(
+            "AC device registered, named from Tag1",
+            ac is not None and ac.name == "Ghar",
+            ac and ac.name,
+        )
+        check(
+            "every zone device linked to the AC by device ID",
+            all(z is not None and z.via_device_id == ac.id for z in zones),
+            [(z and z.via_device_id) for z in zones],
+        )
+        check(
+            "a change broadcast from the bridge triggers a read",
+            BROADCAST[0],
+            BROADCAST,
+        )
         check("unload unloads every platform", len(UNLOADED[0]) == 7, UNLOADED)
-        check("hub firmware is the AC device's software version", ac.sw_version == "4.36",
-              ac.sw_version)
-        check("options listener: turning notifications off clears them and reloads",
-              LISTENERS == [1] and RELOADS == ["entry1"] and not ha_stubs.notifications,
-              (LISTENERS, RELOADS, ha_stubs.notifications))
+        check(
+            "hub firmware is the AC device's software version",
+            ac.sw_version == "4.36",
+            ac.sw_version,
+        )
+        check(
+            "options listener: turning notifications off clears them and reloads",
+            LISTENERS == [1] and RELOADS == ["entry1"] and not ha_stubs.notifications,
+            (LISTENERS, RELOADS, ha_stubs.notifications),
+        )
         import izone_local
+
         removable = await izone_local.async_remove_config_entry_device(
-            None, ENTRY[0], SimpleNamespace(identifiers={("izone_local", "000012345_zone9")}))
-        kept = await izone_local.async_remove_config_entry_device(None, ENTRY[0], zones[0])
-        check("the user can delete only devices the bridge doesn't report",
-              removable and not kept)
+            None,
+            ENTRY[0],
+            SimpleNamespace(identifiers={("izone_local", "000012345_zone9")}),
+        )
+        kept = await izone_local.async_remove_config_entry_device(
+            None, ENTRY[0], zones[0]
+        )
+        check(
+            "the user can delete only devices the bridge doesn't report",
+            removable and not kept,
+        )
         count = len(REGISTRY.devices)
-        check("second setup (a restart): no new devices, still linked",
-              await setup(s, host) is True and len(REGISTRY.devices) == count
-              and all(z.via_device_id == ac.id for z in zones), len(REGISTRY.devices))
+        check(
+            "second setup (a restart): no new devices, still linked",
+            await setup(s, host) is True
+            and len(REGISTRY.devices) == count
+            and all(z.via_device_id == ac.id for z in zones),
+            len(REGISTRY.devices),
+        )
     await runner.cleanup()
     print("\nALL PASSED" if not fails else f"\nFAILED: {fails}")
     sys.exit(1 if fails else 0)

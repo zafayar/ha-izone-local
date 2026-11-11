@@ -23,10 +23,36 @@ from izone_local.coordinator import IZoneCoordinator
 api.COMMAND_GAP = 0.02
 c.CONFIRM_INTERVAL = 0.02
 
-SYS = {"SysOn": 0, "SysMode": 2, "SysFan": 6, "Setpoint": 2200, "Temp": 2200,
-       "CtrlZone": 15, "NoOfZones": 2, "EcoLock": 1, "EcoMin": 1800, "EcoMax": 2600}
-Z = [{"Index": 0, "Name": "Living", "ZoneType": 3, "SensType": 0, "Mode": 2, "Setpoint": 2100},
-     {"Index": 1, "Name": "Hall", "ZoneType": 1, "SensType": 255, "Mode": 2, "Setpoint": 0}]
+SYS = {
+    "SysOn": 0,
+    "SysMode": 2,
+    "SysFan": 6,
+    "Setpoint": 2200,
+    "Temp": 2200,
+    "CtrlZone": 15,
+    "NoOfZones": 2,
+    "EcoLock": 1,
+    "EcoMin": 1800,
+    "EcoMax": 2600,
+}
+Z = [
+    {
+        "Index": 0,
+        "Name": "Living",
+        "ZoneType": 3,
+        "SensType": 0,
+        "Mode": 2,
+        "Setpoint": 2100,
+    },
+    {
+        "Index": 1,
+        "Name": "Hall",
+        "ZoneType": 1,
+        "SensType": 255,
+        "Mode": 2,
+        "Setpoint": 0,
+    },
+]
 cmds, fails = [], []
 
 
@@ -76,63 +102,102 @@ async def main():
         await climate.async_setup_entry(None, entry, ents.extend)
         ac, living, hall = ents
 
-        check("eco lock: range 18-26", (ac.min_temp, ac.max_temp) == (18.0, 26.0)
-              and (living.min_temp, living.max_temp) == (18.0, 26.0),
-              (ac.min_temp, ac.max_temp))
-        check("reported Quiet fan is named, not offered",
-              ac.fan_mode == "quiet" and "quiet" not in ac.fan_modes, ac.fan_mode)
-        check("fan type not reported: every speed offered",
-              ac.fan_modes == ["low", "medium", "high", "auto", "top"], ac.fan_modes)
-        for en, kind, speeds in ((1, 1, ["low", "medium", "high", "auto"]),
-                                 (1, 0, ["low", "high", "auto"]),
-                                 (1, 3, ["low", "medium", "high", "auto", "top"]),
-                                 (0, 3, ["low", "medium", "high"])):
+        check(
+            "eco lock: range 18-26",
+            (ac.min_temp, ac.max_temp) == (18.0, 26.0)
+            and (living.min_temp, living.max_temp) == (18.0, 26.0),
+            (ac.min_temp, ac.max_temp),
+        )
+        check(
+            "reported Quiet fan is named, not offered",
+            ac.fan_mode == "quiet" and "quiet" not in ac.fan_modes,
+            ac.fan_mode,
+        )
+        check(
+            "fan type not reported: every speed offered",
+            ac.fan_modes == ["low", "medium", "high", "auto", "top"],
+            ac.fan_modes,
+        )
+        for en, kind, speeds in (
+            (1, 1, ["low", "medium", "high", "auto"]),
+            (1, 0, ["low", "high", "auto"]),
+            (1, 3, ["low", "medium", "high", "auto", "top"]),
+            (0, 3, ["low", "medium", "high"]),
+        ):
             co.data.system.update(FanAutoEn=en, FanAutoType=kind)
-            check(f"FanAutoEn {en}, FanAutoType {kind}: {speeds}", ac.fan_modes == speeds,
-                  ac.fan_modes)
+            check(
+                f"FanAutoEn {en}, FanAutoType {kind}: {speeds}",
+                ac.fan_modes == speeds,
+                ac.fan_modes,
+            )
         try:
             await ac.async_set_fan_mode("auto")
             check("a speed the unit lacks is refused", False)
         except ServiceValidationError as err:
-            check("a speed the unit lacks is refused", "low, medium, high" in str(err), err)
+            check(
+                "a speed the unit lacks is refused",
+                "low, medium, high" in str(err),
+                err,
+            )
         for key in ("FanAutoEn", "FanAutoType"):
             del co.data.system[key]
 
         cmds.clear()
         await ac.async_set_temperature(temperature=30, hvac_mode=HVACMode.COOL)
-        check("AC: mode + temperature in one request, temperature clamped to 26",
-              cmds == [{"SysMode": 1}, {"SysSetpoint": 2600}, {"SysOn": 1}]
-              or sorted(map(str, cmds)) == sorted(map(str, [{"SysMode": 1}, {"SysOn": 1},
-                                                             {"SysSetpoint": 2600}])), cmds)
-        check("AC ends cool at 26", str(ac.hvac_mode) == "cool" and ac.target_temperature == 26.0,
-              (ac.hvac_mode, ac.target_temperature))
+        check(
+            "AC: mode + temperature in one request, temperature clamped to 26",
+            cmds == [{"SysMode": 1}, {"SysSetpoint": 2600}, {"SysOn": 1}]
+            or sorted(map(str, cmds))
+            == sorted(map(str, [{"SysMode": 1}, {"SysOn": 1}, {"SysSetpoint": 2600}])),
+            cmds,
+        )
+        check(
+            "AC ends cool at 26",
+            str(ac.hvac_mode) == "cool" and ac.target_temperature == 26.0,
+            (ac.hvac_mode, ac.target_temperature),
+        )
 
         cmds.clear()
         await living.async_set_temperature(temperature=15, hvac_mode=HVACMode.AUTO)
-        check("zone: auto + temperature clamped to 18",
-              {"ZoneSetpoint": {"Index": 0, "Setpoint": 1800}} in cmds
-              and living.target_temperature == 18.0, cmds)
+        check(
+            "zone: auto + temperature clamped to 18",
+            {"ZoneSetpoint": {"Index": 0, "Setpoint": 1800}} in cmds
+            and living.target_temperature == 18.0,
+            cmds,
+        )
 
         cmds.clear()
         await living.async_set_temperature(temperature=21, hvac_mode=HVACMode.OFF)
-        check("zone: off with a temperature closes it and skips the temperature",
-              not any("ZoneSetpoint" in x for x in cmds)
-              and {"ZoneMode": {"Index": 0, "Mode": 2}} in cmds, cmds)
+        check(
+            "zone: off with a temperature closes it and skips the temperature",
+            not any("ZoneSetpoint" in x for x in cmds)
+            and {"ZoneMode": {"Index": 0, "Mode": 2}} in cmds,
+            cmds,
+        )
 
-        for what, coro in (("set_hvac_mode heat", living.async_set_hvac_mode(HVACMode.HEAT)),
-                           ("temperature with heat",
-                            living.async_set_temperature(temperature=21, hvac_mode=HVACMode.HEAT)),
-                           ("open/close zone set to auto",
-                            hall.async_set_hvac_mode(HVACMode.AUTO))):
+        for what, coro in (
+            ("set_hvac_mode heat", living.async_set_hvac_mode(HVACMode.HEAT)),
+            (
+                "temperature with heat",
+                living.async_set_temperature(temperature=21, hvac_mode=HVACMode.HEAT),
+            ),
+            ("open/close zone set to auto", hall.async_set_hvac_mode(HVACMode.AUTO)),
+        ):
             try:
                 await coro
                 check(f"{what} raises a clear error", False)
             except ServiceValidationError as err:
-                check(f"{what} raises a clear error", "set on the AC" in str(err), str(err))
+                check(
+                    f"{what} raises a clear error",
+                    "set on the AC" in str(err),
+                    str(err),
+                )
 
         SYS["EcoLock"] = 0
         await co.async_refresh()
-        check("eco lock off: full 15-30 range", (ac.min_temp, ac.max_temp) == (15.0, 30.0))
+        check(
+            "eco lock off: full 15-30 range", (ac.min_temp, ac.max_temp) == (15.0, 30.0)
+        )
     await runner.cleanup()
     print("\nALL PASSED" if not fails else f"\nFAILED: {fails}")
     sys.exit(1 if fails else 0)

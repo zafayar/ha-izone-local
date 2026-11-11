@@ -56,26 +56,41 @@ async def main():
         ok = False
         try:
             await ready.async_activate()
-            print(f"{t()} activate returned; Master shows {master.hvac_mode}, status {master.status!r}")
+            print(
+                f"{t()} activate returned; Master shows {master.hvac_mode}, status {master.status!r}"
+            )
             last = None
             while co._wants and time.perf_counter() - T0 < 120:
-                cur = (co.data.system["SysOn"],
-                       [(z["Mode"], z["Setpoint"]) for z in co.data.zones.values()][:4],
-                       master.status)
+                cur = (
+                    co.data.system["SysOn"],
+                    [(z["Mode"], z["Setpoint"]) for z in co.data.zones.values()][:4],
+                    master.status,
+                )
                 if cur != last:
                     print(f"{t()} STATE {cur}")
                     last = cur
                 await asyncio.sleep(0.2)
             now = await snap(client)
             got = [z[:2] for z in now[1][:4]]
-            ok = (now[0][0] == 1 and got[0][0] == 2 and got[1][0] == 2
-                  and got[2] == (3, 2200) and got[3] == (3, 2400) and not co._wants)
+            ok = (
+                now[0][0] == 1
+                and got[0][0] == 2
+                and got[1][0] == 2
+                and got[2] == (3, 2200)
+                and got[3] == (3, 2400)
+                and not co._wants
+            )
             print(f"{t()} done: AC {now[0]}, zones {got} ->", "PASS" if ok else "FAIL")
         finally:
             ok2, _ = await restore(client, orig)
             await asyncio.sleep(45)
             later = await snap(client)
-            print("restored:", ok2, "| 45 s later:", "OK" if later == orig else f"DIFFERS {later}")
+            print(
+                "restored:",
+                ok2,
+                "| 45 s later:",
+                "OK" if later == orig else f"DIFFERS {later}",
+            )
 
 
 asyncio.run(main())

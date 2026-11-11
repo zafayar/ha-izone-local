@@ -288,7 +288,9 @@ class IZoneClient:
     # have seen the controller answer an edit sent sooner with {ERROR}, and
     # {ERROR} to edits it did keep, so the caller reads the favourite back.
 
-    async def set_favourite_zones(self, index: int, zones: list[dict[str, int]]) -> None:
+    async def set_favourite_zones(
+        self, index: int, zones: list[dict[str, int]]
+    ) -> None:
         """Replace all 14 zones' {Mode, Setpoint} ("Set Schedule Zone Settings")."""
         await self.command("SchedZones", {"Index": index, "Zones": zones})
 

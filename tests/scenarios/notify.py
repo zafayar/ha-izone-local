@@ -40,8 +40,11 @@ async def main():
     send(b"iZoneChanged_Zones", port)
     send(b"something else", port)
     await asyncio.sleep(0.2)
-    check("bridge broadcast passed on; other messages ignored",
-          got == ["iZoneChanged_Zones"], got)
+    check(
+        "bridge broadcast passed on; other messages ignored",
+        got == ["iZoneChanged_Zones"],
+        got,
+    )
 
     # A second bridge's listener can share the port. (Which socket gets a
     # unicast datagram on a shared port differs by OS, so it isn't sent one;

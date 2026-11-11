@@ -69,7 +69,9 @@ class Entity:
             return self._attr_name
         d = self.entity_description
         if d is not None:
-            return d.translation_key or (d.device_class and str(d.device_class)) or d.key
+            return (
+                d.translation_key or (d.device_class and str(d.device_class)) or d.key
+            )
         return self._attr_translation_key
 
 
@@ -171,7 +173,9 @@ class Platform(StrEnum):
 
 
 class DataUpdateCoordinator[T]:
-    def __init__(self, hass, logger, *, config_entry=None, name=None, update_interval=None):
+    def __init__(
+        self, hass, logger, *, config_entry=None, name=None, update_interval=None
+    ):
         self.hass = hass
         self.config_entry = config_entry
         self.data = None
@@ -206,15 +210,23 @@ class CoordinatorEntity[T](Entity):
 def _messages():
     import json
     import pathlib
-    strings = pathlib.Path(__file__).parents[1] / "custom_components/izone_local/strings.json"
+
+    strings = (
+        pathlib.Path(__file__).parents[1] / "custom_components/izone_local/strings.json"
+    )
     return json.loads(strings.read_text(encoding="utf-8"))["exceptions"]
 
 
 class HomeAssistantError(Exception):
     """Renders a translated error from strings.json, as Home Assistant does."""
 
-    def __init__(self, *args, translation_domain=None, translation_key=None,
-                 translation_placeholders=None):
+    def __init__(
+        self,
+        *args,
+        translation_domain=None,
+        translation_key=None,
+        translation_placeholders=None,
+    ):
         if translation_key is not None:
             message = _messages()[translation_key]["message"]
             args = (message.format(**(translation_placeholders or {})),)
@@ -246,6 +258,7 @@ class ConfigEntry[T]:
 
     def async_create_background_task(self, hass, coro, name):
         import asyncio
+
         return asyncio.get_running_loop().create_task(coro, name=name)
 
 
@@ -265,10 +278,16 @@ class FlowHandler:
     hass = None
     context: dict = {}
 
-    def async_show_form(self, *, step_id, data_schema=None, errors=None,
-                        description_placeholders=None):
-        return {"type": "form", "step_id": step_id, "data_schema": data_schema,
-                "errors": errors or {}, "description_placeholders": description_placeholders}
+    def async_show_form(
+        self, *, step_id, data_schema=None, errors=None, description_placeholders=None
+    ):
+        return {
+            "type": "form",
+            "step_id": step_id,
+            "data_schema": data_schema,
+            "errors": errors or {},
+            "description_placeholders": description_placeholders,
+        }
 
     def async_create_entry(self, *, data, title=None):
         return {"type": "create_entry", "title": title, "data": data}
@@ -343,49 +362,98 @@ def _dismiss_notification(hass, notification_id):
 
 persistent_notification = mod(
     "homeassistant.components.persistent_notification",
-    async_create=_create_notification, async_dismiss=_dismiss_notification)
+    async_create=_create_notification,
+    async_dismiss=_dismiss_notification,
+)
 mod("homeassistant.components", persistent_notification=persistent_notification)
-mod("homeassistant.components.climate", HVACMode=HVACMode, ClimateEntity=ClimateEntity,
-    ClimateEntityFeature=ClimateEntityFeature, FAN_AUTO="auto", FAN_LOW="low",
-    FAN_MEDIUM="medium", FAN_HIGH="high", ATTR_HVAC_MODE="hvac_mode")
-mod("homeassistant.components.sensor", SensorEntity=SensorEntity,
-    SensorEntityDescription=EntityDescription, SensorDeviceClass=SensorDeviceClass,
-    SensorStateClass=SensorStateClass)
-mod("homeassistant.components.binary_sensor", BinarySensorEntity=BinarySensorEntity,
+mod(
+    "homeassistant.components.climate",
+    HVACMode=HVACMode,
+    ClimateEntity=ClimateEntity,
+    ClimateEntityFeature=ClimateEntityFeature,
+    FAN_AUTO="auto",
+    FAN_LOW="low",
+    FAN_MEDIUM="medium",
+    FAN_HIGH="high",
+    ATTR_HVAC_MODE="hvac_mode",
+)
+mod(
+    "homeassistant.components.sensor",
+    SensorEntity=SensorEntity,
+    SensorEntityDescription=EntityDescription,
+    SensorDeviceClass=SensorDeviceClass,
+    SensorStateClass=SensorStateClass,
+)
+mod(
+    "homeassistant.components.binary_sensor",
+    BinarySensorEntity=BinarySensorEntity,
     BinarySensorEntityDescription=EntityDescription,
-    BinarySensorDeviceClass=BinarySensorDeviceClass)
+    BinarySensorDeviceClass=BinarySensorDeviceClass,
+)
 mod("homeassistant.components.switch", SwitchEntity=SwitchEntity)
 mod("homeassistant.components.scene", Scene=Scene)
 mod("homeassistant.components.select", SelectEntity=SelectEntity)
 mod("homeassistant.components.number", NumberEntity=NumberEntity, NumberMode=NumberMode)
-mod("homeassistant.const", ATTR_TEMPERATURE="temperature", CONF_HOST="host",
-    PERCENTAGE="%", EntityCategory=EntityCategory, UnitOfTemperature=UnitOfTemperature,
+mod(
+    "homeassistant.const",
+    ATTR_TEMPERATURE="temperature",
+    CONF_HOST="host",
+    PERCENTAGE="%",
+    EntityCategory=EntityCategory,
+    UnitOfTemperature=UnitOfTemperature,
     UnitOfTime=UnitOfTime,
-    Platform=Platform)
+    Platform=Platform,
+)
 mod("homeassistant.core", HomeAssistant=object, callback=lambda f: f)
-mod("homeassistant.exceptions", HomeAssistantError=HomeAssistantError,
-    ServiceValidationError=ServiceValidationError)
-mod("homeassistant.config_entries", ConfigEntry=ConfigEntry, ConfigFlow=ConfigFlow,
-    OptionsFlow=OptionsFlow, SOURCE_INTEGRATION_DISCOVERY="integration_discovery",
-    ConfigFlowResult=dict)
+mod(
+    "homeassistant.exceptions",
+    HomeAssistantError=HomeAssistantError,
+    ServiceValidationError=ServiceValidationError,
+)
+mod(
+    "homeassistant.config_entries",
+    ConfigEntry=ConfigEntry,
+    ConfigFlow=ConfigFlow,
+    OptionsFlow=OptionsFlow,
+    SOURCE_INTEGRATION_DISCOVERY="integration_discovery",
+    ConfigFlowResult=dict,
+)
 mod("homeassistant.helpers")
 mod("homeassistant.util")
 mod("homeassistant.util.dt", utcnow=lambda: datetime.now(UTC))
-mod("homeassistant.helpers.config_validation", config_entry_only_config_schema=lambda domain: None)
+mod(
+    "homeassistant.helpers.config_validation",
+    config_entry_only_config_schema=lambda domain: None,
+)
 mod("homeassistant.helpers.typing", ConfigType=dict, DiscoveryInfoType=dict)
-mod("homeassistant.helpers.discovery_flow",
+mod(
+    "homeassistant.helpers.discovery_flow",
     async_create_flow=lambda hass, domain, context, data: created_flows.append(
-        (domain, context, data)))
-mod("homeassistant.helpers.event",
+        (domain, context, data)
+    ),
+)
+mod(
+    "homeassistant.helpers.event",
     async_track_time_interval=lambda hass, action, interval, **kw: timers.append(
-        (action, interval, kw)))
-mod("homeassistant.helpers.start",
-    async_at_started=lambda hass, job: at_started.append(job))
+        (action, interval, kw)
+    ),
+)
+mod(
+    "homeassistant.helpers.start",
+    async_at_started=lambda hass, job: at_started.append(job),
+)
 # Without async_register_platform_entity_service, like Home Assistant before
 # 2025.10; a test can add it to check the newer path.
 mod("homeassistant.helpers.service")
-mod("homeassistant.helpers.device_registry", DeviceInfo=dict, DeviceEntry=object,
-    DeviceRegistry=object, async_entries_for_config_entry=lambda registry, entry_id: [])
+mod(
+    "homeassistant.helpers.device_registry",
+    DeviceInfo=dict,
+    DeviceEntry=object,
+    DeviceRegistry=object,
+    async_entries_for_config_entry=lambda registry, entry_id: [],
+)
+
+
 class EntityPlatform:
     """Records the entity services a platform registers."""
 
@@ -397,8 +465,15 @@ class EntityPlatform:
 
 
 platform = EntityPlatform()
-mod("homeassistant.helpers.entity_platform", AddConfigEntryEntitiesCallback=object,
-    async_get_current_platform=lambda: platform)
-mod("homeassistant.helpers.update_coordinator", DataUpdateCoordinator=DataUpdateCoordinator,
-    CoordinatorEntity=CoordinatorEntity, UpdateFailed=UpdateFailed)
+mod(
+    "homeassistant.helpers.entity_platform",
+    AddConfigEntryEntitiesCallback=object,
+    async_get_current_platform=lambda: platform,
+)
+mod(
+    "homeassistant.helpers.update_coordinator",
+    DataUpdateCoordinator=DataUpdateCoordinator,
+    CoordinatorEntity=CoordinatorEntity,
+    UpdateFailed=UpdateFailed,
+)
 mod("homeassistant.helpers.aiohttp_client", async_get_clientsession=None)

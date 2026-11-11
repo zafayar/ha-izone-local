@@ -26,9 +26,13 @@ class Scenarios(unittest.TestCase):
                     timeout=300,
                     check=False,
                 )
-                failed = [ln for ln in result.stdout.splitlines() if ln.startswith("FAIL")]
+                failed = [
+                    ln for ln in result.stdout.splitlines() if ln.startswith("FAIL")
+                ]
                 detail = "\n".join(failed) or result.stderr[-3000:]
-                if "ALL PASSED" not in result.stdout and os.environ.get("GITHUB_ACTIONS"):
+                if "ALL PASSED" not in result.stdout and os.environ.get(
+                    "GITHUB_ACTIONS"
+                ):
                     # Annotations show on the run page without opening the log.
                     message = detail.replace("%", "%25").replace("\n", "%0A")
                     print(f"::error title={path.stem} failed::{message}", flush=True)

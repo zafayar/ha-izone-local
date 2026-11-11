@@ -18,8 +18,15 @@ from ha_stubs import ConfigEntry, notifications
 from izone_local.api import IZoneClient, describe_firmware_changes
 from izone_local.coordinator import IZoneCoordinator
 
-SYS = {"SysOn": 1, "SysMode": 1, "SysFan": 1, "NoOfZones": 0, "CtrlZone": 15,
-       "Warnings": "none", "FilterWarn": 3}
+SYS = {
+    "SysOn": 1,
+    "SysMode": 1,
+    "SysFan": 1,
+    "NoOfZones": 0,
+    "CtrlZone": 15,
+    "Warnings": "none",
+    "FilterWarn": 3,
+}
 B = {"fmw": "COCB-2F5 4.36 (000000042),CR 3.23"}
 FILTER, FIRMWARE = "izone_local_1_filter", "izone_local_1_firmware"
 fails = []
@@ -39,10 +46,14 @@ async def req(r):
 
 
 async def main():
-    check("firmware changes described",
-          describe_firmware_changes({"CR": "3.23", "C225": "3.80", "X": "1"},
-                                    {"CR": "3.25", "C225": "3.80", "Y": "2"})
-          == ["CR: 3.23 -> 3.25", "X: no longer reported (was 1)", "Y: new, 2"])
+    check(
+        "firmware changes described",
+        describe_firmware_changes(
+            {"CR": "3.23", "C225": "3.80", "X": "1"},
+            {"CR": "3.25", "C225": "3.80", "Y": "2"},
+        )
+        == ["CR: 3.23 -> 3.25", "X: no longer reported (was 1)", "Y: new, 2"],
+    )
 
     app = web.Application()
     app.router.add_post("/iZoneRequestV2", req)
@@ -54,8 +65,9 @@ async def main():
     async with aiohttp.ClientSession() as s:
         entry = ConfigEntry({"host": host, "uid": "1"})
         reloads = []
-        hass = SimpleNamespace(config_entries=SimpleNamespace(
-            async_schedule_reload=reloads.append))
+        hass = SimpleNamespace(
+            config_entries=SimpleNamespace(async_schedule_reload=reloads.append)
+        )
         co = IZoneCoordinator(hass, entry, IZoneClient(s, host), "1")
         entry.runtime_data = co
         await co.async_refresh()
@@ -64,12 +76,18 @@ async def main():
         SYS["Warnings"] = "filter"
         await co.async_refresh()
         title, message = notifications.get(FILTER, ("", ""))
-        check("filter warning: notified", "filter" in title and "every 3 months" in message,
-              notifications)
+        check(
+            "filter warning: notified",
+            "filter" in title and "every 3 months" in message,
+            notifications,
+        )
 
         notifications.pop(FILTER)  # the user dismisses it
         await co.async_refresh()
-        check("a dismissed notification isn't raised again every poll", FILTER not in notifications)
+        check(
+            "a dismissed notification isn't raised again every poll",
+            FILTER not in notifications,
+        )
 
         SYS["Warnings"] = "none"
         await co.async_refresh()
@@ -78,14 +96,19 @@ async def main():
         check("a new warning is notified again", FILTER in notifications)
         SYS["Warnings"] = "none"
         await co.async_refresh()
-        check("the notification clears when the warning goes", FILTER not in notifications)
+        check(
+            "the notification clears when the warning goes", FILTER not in notifications
+        )
 
         B["fmw"] = "COCB-2F5 4.39 (000000042),CR 3.23"
         co._firmware_due = 0
         await co.async_refresh()
         title, message = notifications.get(FIRMWARE, ("", ""))
-        check("firmware change: notified with what changed",
-              "firmware" in title and message == "- COCB-2F5: 4.36 -> 4.39", notifications)
+        check(
+            "firmware change: notified with what changed",
+            "firmware" in title and message == "- COCB-2F5: 4.36 -> 4.39",
+            notifications,
+        )
         check("the serial number isn't in it", "000000042" not in message)
 
         # Turned off in the options.
@@ -98,15 +121,21 @@ async def main():
         await co.async_refresh()
         check("while off: none raised", notifications == {}, notifications)
         check("but the firmware is still read", co.hub_firmware == "4.40")
-        check("a module that's gone (CR) reloads the entry, for its sensor",
-              reloads == ["entry1"], reloads)
+        check(
+            "a module that's gone (CR) reloads the entry, for its sensor",
+            reloads == ["entry1"],
+            reloads,
+        )
 
         # Turning them back on reloads the entry: a fresh coordinator.
         entry.options = {"notifications": True}
         co = IZoneCoordinator(hass, entry, IZoneClient(s, host), "1")
         await co.async_refresh()
         check("back on: a warning that's still on is shown", FILTER in notifications)
-        check("but the first read of the firmware isn't a change", FIRMWARE not in notifications)
+        check(
+            "but the first read of the firmware isn't a change",
+            FIRMWARE not in notifications,
+        )
     await runner.cleanup()
     ha_stubs.notifications.clear()
     print("\nALL PASSED" if not fails else f"\nFAILED: {fails}")

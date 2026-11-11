@@ -99,7 +99,9 @@ def _remove_stale_devices(
     for device in dr.async_entries_for_config_entry(registry, entry.entry_id):
         if not device.identifiers & current:
             _LOGGER.info("Removing %s: the bridge no longer reports it", device.name)
-            registry.async_update_device(device.id, remove_config_entry_id=entry.entry_id)
+            registry.async_update_device(
+                device.id, remove_config_entry_id=entry.entry_id
+            )
 
 
 async def async_remove_config_entry_device(
