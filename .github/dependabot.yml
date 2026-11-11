@@ -1,0 +1,13 @@
+# Proposes updates to the actions pinned in .github/workflows. The integration
+# has no Python requirements, and CI installs its tools directly.
+version: 2
+updates:
+  - package-ecosystem: "github-actions"
+    directory: "/"
+    schedule:
+      interval: "weekly"
+    cooldown:
+      default-days: 3
+    groups:
+      actions:
+        patterns: ["*"]

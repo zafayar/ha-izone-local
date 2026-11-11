@@ -6,7 +6,8 @@ on:
   pull_request:
 
 # Actions are pinned to commit hashes (a tag or branch can be moved);
-# the comment names the version. The token only needs to read the repo.
+# the comment names the version, and Dependabot proposes updates. The
+# token only needs to read the repo.
 permissions:
   contents: read
 
