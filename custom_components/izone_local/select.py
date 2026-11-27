@@ -30,8 +30,8 @@ class IZoneSleepTimer(IZoneEntity, SelectEntity):
 
     It runs on the controller (and shows on the wall panel), so it still
     turns the AC off if Home Assistant is down. While it runs, the option
-    shown is the step the time left rounds up to; the "Sleep timer ends"
-    sensor has the exact time. Choosing a time while the AC is off turns the
+    shown is the step the time left rounds up to; the "Sleep timer left"
+    sensor has the exact minutes. Choosing a time while the AC is off turns the
     AC on for that long, as the panel's button does.
     """
 

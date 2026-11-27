@@ -12,7 +12,6 @@ sys.path.insert(0, str(_ROOT / "custom_components"))
 
 import asyncio
 import json
-from datetime import UTC, datetime, timedelta
 
 import aiohttp
 import ha_stubs  # noqa: F401
@@ -107,15 +106,10 @@ async def main():
         timer = ents[0]
         sens = []
         await sensor.async_setup_entry(None, entry, sens.extend)
-        end = next(e for e in sens if isinstance(e, sensor.IZoneSleepTimerEndSensor))
         left = next(e for e in sens if e.unique_id == "1_sleep_timer_left")
-        now = [datetime(2026, 10, 23, 21, 0, tzinfo=UTC)]
-        sensor.dt_util.utcnow = lambda: now[0]
         check(
-            "end sensor: a timestamp, unknown with no timer",
-            end.unique_id == "1_sleep_timer_end"
-            and end._attr_device_class == "timestamp"
-            and end.native_value is None,
+            "no end-time sensor: only what the controller reports",
+            not any("sleep_timer_end" in e.unique_id for e in sens),
         )
         check(
             "time left: minutes, 0 with no timer",
@@ -148,17 +142,13 @@ async def main():
             left.native_value == 59,
             left.native_value,
         )
-        first = end.native_value
-        check(
-            "end time from the minutes left",
-            first == now[0] + timedelta(minutes=59),
-            first,
-        )
-        now[0] += timedelta(seconds=50)
-        check("steady between countdown steps", end.native_value == first)
         SYS["SleepTimerM"] = 58
-        now[0] += timedelta(seconds=20)
-        check("steady across a step", end.native_value == first)
+        await co.async_refresh()
+        check(
+            "time left: follows the countdown",
+            left.native_value == 58,
+            left.native_value,
+        )
 
         # While the 1 h timer counts down, a change the bridge first drops
         # is re-sent: the countdown isn't mistaken for a change elsewhere.
@@ -166,11 +156,7 @@ async def main():
         B["tick"], B["ignore"] = True, 1
         await timer.async_select_option("4h")
         B["tick"] = False
-        check(
-            "a new timer moves the end time",
-            end.native_value == now[0] + timedelta(minutes=239),
-            end.native_value,
-        )
+        check("time left: the new timer", left.native_value == 239, left.native_value)
         check(
             "re-sent after the countdown moved",
             cmds == [{"SysSleepTimer": 240}] * 2 and timer.current_option == "4h",
@@ -221,9 +207,7 @@ async def main():
         await co.async_refresh()
         check(
             "AC off: shown as off",
-            timer.current_option == "off"
-            and end.native_value is None
-            and left.native_value == 0,
+            timer.current_option == "off" and left.native_value == 0,
         )
         cmds.clear()
         await timer.async_select_option("off")

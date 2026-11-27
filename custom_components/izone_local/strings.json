@@ -142,7 +142,6 @@
       "damper_position": { "name": "Damper position" },
       "run_hours": { "name": "Run hours" },
       "control_zone": { "name": "Control zone" },
-      "sleep_timer_end": { "name": "Sleep timer ends" },
       "sleep_timer_left": { "name": "Sleep timer left" },
       "firmware": { "name": "Firmware {module}" },
       "sensor_battery": {

@@ -72,9 +72,6 @@ SLEEP_TIMER_OPTIONS = {
 # accepting it when read every second, about 10 s while the reconcile loop
 # reads it (measured). A re-send restarts that wait, so it waits this long.
 SLEEP_TIMER_SETTLE = 15
-# The minutes left are whole minutes, so the end time worked out from them
-# is only good to a minute; it's only moved when it's out by more than this.
-SLEEP_TIMER_END_TOLERANCE = timedelta(seconds=90)
 
 
 def sleep_timer_option(minutes: int | None) -> str:
